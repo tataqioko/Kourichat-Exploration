@@ -102,4 +102,4 @@ def save_avatar():
 @avatar_manager.route('/edit_avatar', methods=['GET'])
 def edit_avatar():
     """角色设定页面"""
-    return render_template('edit_avatar.html')
+    return render_template('edit_avatar.html', active_page='edit_avatar')

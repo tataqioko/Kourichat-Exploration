@@ -115,7 +115,7 @@ KouriChat/
 1. 确保满足前提条件并完成配置
 2. 运行主程序：`python run.py`或双击`run.bat`
 3. 程序将自动初始化系统，连接微信，并开始监听消息
-4. 可通过WebUI（http://localhost:7860）进行配置管理
+4. 可通过WebUI（http://localhost:8502）进行配置管理
 
 ## 💡 开发计划
 

@@ -31,13 +31,18 @@
                 </li>
             </ul>
             
-            <div class="d-flex align-items-center">
+            <div class="d-flex align-items-center ms-auto">
                 <div class="form-check form-switch me-3">
                     <input class="form-check-input" type="checkbox" role="switch" 
                            id="darkModeToggle" data-dark-toggle>
                     <label class="form-check-label" for="darkModeToggle">
                         <i class="bi bi-moon-stars me-1"></i>护眼模式
                     </label>
+                </div>
+                <div class="me-3">
+                    <button class="btn btn-outline-primary" type="button" onclick="showManualAnnouncement()">
+                        <i class="bi bi-bell me-2"></i>查看公告
+                    </button>
                 </div>
                 <div>
                     <label for="backgroundInput" class="d-none">选择背景图片</label>
@@ -104,6 +109,50 @@ document.getElementById('backgroundInput').addEventListener('change', function(e
         });
     }
 });
+
+function showManualAnnouncement() {
+    // 尝试获取公告模态框实例并显示
+    const announcementModalElement = document.getElementById('announcementModal');
+    if (announcementModalElement) {
+        const announcementModal = bootstrap.Modal.getOrCreateInstance(announcementModalElement);
+        
+        // 如果公告内容尚未加载，则先加载
+        const contentElement = document.getElementById('announcementContent');
+        if (!contentElement.innerHTML.trim()) {
+            fetch('/get_announcement')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.enabled) {
+                        // 设置公告内容
+                        const modalTitleElement = document.getElementById('announcementModalLabel');
+                        modalTitleElement.textContent = data.title;
+                        modalTitleElement.classList.remove('fs-4');
+                        modalTitleElement.classList.add('fw-bold', 'text-center', 'w-100', 'fs-3');
+                        contentElement.innerHTML = data.content;
+                        
+                        const modalHeader = document.querySelector('#announcementModal .modal-header');
+                        modalHeader.classList.remove('bg-info', 'bg-warning', 'bg-danger', 'bg-success', 'text-white', 'text-dark');
+                        modalHeader.style.backgroundColor = '';
+                        
+                        // 显示模态框
+                        announcementModal.show();
+                    } else {
+                        showToast('公告当前已禁用', 'warning');
+                    }
+                })
+                .catch(error => {
+                    console.error("获取公告失败:", error);
+                    showToast('获取公告失败', 'error');
+                });
+        } else {
+            // 如果内容已加载，直接显示
+            announcementModal.show();
+        }
+    } else {
+        console.error("找不到公告模态框元素");
+        showToast('公告功能异常', 'error');
+    }
+}
 </script>
 
 <style>
@@ -174,6 +223,12 @@ document.getElementById('backgroundInput').addEventListener('change', function(e
 .navbar .form-check-input {
     margin: 0;
     vertical-align: middle;
+}
+
+/* 添加统一的选中状态样式 */
+.navbar .form-check-input:checked {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
 }
 
 @keyframes spin {

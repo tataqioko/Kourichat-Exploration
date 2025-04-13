@@ -14,19 +14,21 @@
         :root {
             --primary-color: #6366f1;
             --secondary-color: #4f46e5;
-            --background-color: #f0f4f8;  /* 更柔和的浅蓝灰色背景 */
+            --background-color: #f8fafc;  /* 统一背景颜色 */
             --text-color: #1e293b;
-            --card-bg: rgba(255, 255, 255, 0.494);
-            --card-border: rgba(255, 255, 255, 0.5);
-            --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --card-bg: rgba(255, 255, 255, 0.8); /* 统一卡片背景 */
+            --card-border: rgba(255, 255, 255, 0.5); /* 统一卡片边框 */
+            --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); /* 统一卡片阴影 */
         }
 
         [data-bs-theme="dark"] {
-            --background-color: #1a1f2e;  /* 更柔和的深色背景 */
-            --text-color: #f8fafc;
-            --card-bg: rgba(30, 41, 59, 0.612);
-            --card-border: rgba(255, 255, 255, 0.1);
-            --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+            --primary-color: #818cf8;
+            --secondary-color: #6366f1;
+            --background-color: #0f172a;  /* 统一深色背景 */
+            --text-color: #e2e8f0;
+            --card-bg: rgba(30, 41, 59, 0.8); /* 统一深色卡片背景 */
+            --card-border: rgba(255, 255, 255, 0.1); /* 统一深色卡片边框 */
+            --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1); /* 统一深色卡片阴影 */
         }
         html,body{
             height:100%;
@@ -100,11 +102,14 @@
             outline: none;
         }
 
+        /* 注释掉这个可能影响导航栏开关尺寸的全局样式 */
+        /*
         .form-switch .form-check-input {
             width: 3em;
             height: 1.5em;
             margin-left: -3.5em;
         }
+        */
 
         .form-label {
             display: flex;
@@ -154,7 +159,15 @@
             overflow-y: auto;
         }
 
-
+        /* 添加导航栏样式，与dashboard.html保持一致 */
+        .navbar {
+            background: var(--card-bg) !important;
+            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--card-border);
+        }
+        /* 移除重复的导航栏相关样式 */
+        /*
         .navbar .form-check.form-switch {
             display: flex;
             align-items: center;
@@ -175,6 +188,7 @@
             margin: 0;
             vertical-align: middle;
         }
+        */
 
         /* 输入框组样式 */
         .input-group {

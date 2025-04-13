@@ -111,6 +111,9 @@ app.register_blueprint(avatar_bp)
 # 公告配置文件路径
 ANNOUNCEMENT_CONFIG_PATH = os.path.join(ROOT_DIR, 'src/config/announcement.json')
 
+# 添加全局标记，跟踪公告是否已在本应用实例中显示过
+announcement_shown_this_instance = False
+
 def get_available_avatars() -> List[str]:
     """获取可用的人设目录列表"""
     avatar_base_dir = os.path.join(ROOT_DIR, "data/avatars")
@@ -557,18 +560,24 @@ def load_config():
 
 @app.route('/dashboard')
 def dashboard():
-    """仪表盘页面"""
+    global announcement_shown_this_instance # 引用全局标记
     if not session.get('logged_in'):
         return redirect(url_for('login'))
-    
-    # 使用 g 中的配置数据
+
+    # 决定本次请求是否需要显示公告
+    show_announcement_now = not announcement_shown_this_instance
+    if show_announcement_now:
+        announcement_shown_this_instance = True # 标记为已显示
+
+    # 使用 g 中的配置数据 (如果之前有)
     config_groups = g.config_data.get('categories', {})
-    
+
     return render_template(
         'dashboard.html',
         is_local=is_local_network(),
         active_page='dashboard',
-        config_groups=config_groups  # 传递完整的配置组
+        config_groups=config_groups,
+        show_announcement=show_announcement_now # 将显示标记传递给模板
     )
 
 @app.route('/system_info')
@@ -2306,11 +2315,21 @@ def get_announcement():
                 version_info = json.load(f)
                 # 更新公告内容，使用HTML格式化以支持更好的换行和显示
                 base_content = announcement_config['content']
+                
+                # 正确处理description数组
+                description_html = ""
+                if isinstance(version_info['description'], list):
+                    # 如果是数组，将每个元素转换为HTML段落
+                    description_html = "<br>".join(version_info['description'])
+                else:
+                    # 如果是字符串，直接使用
+                    description_html = version_info['description'].replace(',', '<br>')
+                
                 version_content = f"""
 <div class="mt-3 pt-3 border-top">
     <div class="mb-2"><strong>当前版本：</strong>{version_info['version']}</div>
     <div class="mb-2"><strong>更新时间：</strong>{version_info['last_update']}</div>
-    <div><strong>更新内容：</strong><br>{version_info['description'].replace(',', '<br>')}</div>
+    <div><strong>更新内容：</strong><br>{description_html}</div>
 </div>
 """
                 announcement_config['content'] = base_content + version_content
@@ -2320,8 +2339,12 @@ def get_announcement():
     except Exception as e:
         return jsonify({
             'status': 'error',
-            'message': f'读取公告配置失败: {str(e)}'
-        }), 500
+            'message': f'读取公告配置失败: {str(e)}',
+            'enabled': True, 
+            'title': '系统公告',
+            'content': '无法加载公告内容，但系统正常运行中。',
+            'type': 'warning'
+        })
 
 @app.route('/get_vision_api_configs')
 def get_vision_api_configs():
