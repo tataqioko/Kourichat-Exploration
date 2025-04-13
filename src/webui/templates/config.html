@@ -596,10 +596,10 @@
 {% elif key == 'DEEPSEEK_BASE_URL' %}
     <div class="mb-3">
         <select class="form-select mb-2" id="api_provider_select" onchange="updateApiProvider(this.value)" aria-label="选择API提供商">
-            <option value="">请选择API提供商</option>
+            <option value="">请选择服务提供商</option>
             <!-- 预设常用选项，减少依赖异步加载 -->
             <option value="kourichat-global" data-url="https://api.ciallo.ac.cn/v1" data-register="https://api.kourichat.com/register">KouriChat API (全球优化)</option>
-            <option value="kourichat-ap" data-url="https://api.kourichat.com/v1" data-register="https://api.kourichat.com/register">KouriChat API (亚太备线)</option>
+            <option value="kourichat-asia" data-url="https://api.kourichat.com/v1" data-register="https://api.kourichat.com/register">KouriChat API (亚太备线)</option>
             <option value="siliconflow" data-url="https://api.siliconflow.cn/v1/" data-register="https://www.siliconflow.cn">硅基流动 API</option>
             <option value="deepseek" data-url="https://api.deepseek.com/v1" data-register="https://platform.deepseek.com">DeepSeek API</option>
             <option value="ollama" data-url="http://localhost:11434/api/chat" data-register="https://ollama.ai">本地 Ollama</option>
@@ -897,8 +897,10 @@
 
         if (!providerId) return;
 
-        // 添加自定义选项
-        modelSelect.innerHTML += '<option value="custom">自定义模型</option>';
+        // 仅当选择'custom'提供商时添加自定义模型选项
+        if (providerId === 'custom') {
+            modelSelect.innerHTML += '<option value="custom">自定义模型</option>';
+        }
 
         // 保存当前选中的模型，以便后面恢复
         const currentModel = document.getElementById('MODEL').value;
@@ -928,11 +930,19 @@
                 const providerModels = modelConfigs.models[providerId] || [];
                 providerModels.forEach(model => {
                     if (model.status === 'active') {
+                        // 添加推荐标记
+                        const isRecommended = model.name.toLowerCase().includes('推荐') || 
+                                             model.id.includes('v3') || // V3模型通常更新
+                                             model.name.includes('V3');
+                        const recommendedMark = isRecommended ? '(推荐)' : '';
+                        const displayName = model.name.includes('推荐') ? model.name : model.name + recommendedMark;
+                        
                         modelSelect.innerHTML += `
                             <option value="${model.id}" 
                                 data-type="${model.type}"
                                 data-context-length="${model.context_length}"
-                                >${model.name}</option>`;
+                                data-recommended="${isRecommended}"
+                                >${displayName}</option>`;
                     }
                 });
             }
@@ -948,13 +958,71 @@
             
             if (modelExists) {
                 modelSelect.value = currentModel;
-            } else {
-                // 如果不在列表中，显示为自定义模型
+                // 确保自定义输入框隐藏，因为已选择预设模型
+                document.getElementById('customModelInput').style.display = 'none';
+            } else if (providerId === 'custom') {
+                // 只有在自定义提供商模式下才显示自定义模型输入框
                 modelSelect.value = 'custom';
                 const customModelInput = document.getElementById('customModelInput');
                 customModelInput.style.display = 'block';
                 customModelInput.querySelector('input').value = currentModel;
+            } else {
+                // 对于预设提供商，如果模型不存在，自动选择推荐模型或第一个可用模型
+                if (modelSelect.options.length > 1) {
+                    // 首先尝试找到推荐模型
+                    const recommendedOption = Array.from(modelSelect.options).find(opt => 
+                        opt.textContent.includes('推荐') || 
+                        opt.getAttribute('data-recommended') === 'true'
+                    );
+                    
+                    if (recommendedOption) {
+                        modelSelect.value = recommendedOption.value;
+                    } else {
+                        // 如果没有推荐模型，选择第一个有效选项
+                        modelSelect.selectedIndex = 1;
+                    }
+                    
+                    // 更新隐藏的值
+                    const selectedModel = modelSelect.value;
+                    document.getElementById('MODEL').value = selectedModel;
+                }
+                // 确保自定义输入框隐藏
+                document.getElementById('customModelInput').style.display = 'none';
             }
+        } else if (modelSelect.options.length > 1) {
+            // 如果没有当前模型值，自动选择推荐模型或第一个选项
+            const recommendedOption = Array.from(modelSelect.options).find(opt => 
+                opt.textContent.includes('推荐') || 
+                opt.getAttribute('data-recommended') === 'true'
+            );
+            
+            if (recommendedOption) {
+                modelSelect.value = recommendedOption.value;
+            } else {
+                // 如果没有推荐模型，选择第一个有效选项
+                modelSelect.selectedIndex = 1;
+            }
+            
+            // 更新隐藏的值
+            const selectedModel = modelSelect.value;
+            document.getElementById('MODEL').value = selectedModel;
+            // 确保自定义输入框隐藏
+            document.getElementById('customModelInput').style.display = 'none';
+        }
+    }
+
+    // 更新模型
+    function updateModel(value) {
+        const modelInput = document.getElementById('MODEL');
+        const customModelInput = document.getElementById('customModelInput');
+        const apiSelect = document.getElementById('api_provider_select');
+        
+        // 只在自定义API提供商模式下才允许自定义模型
+        if (value === 'custom' && apiSelect.value === 'custom') {
+            customModelInput.style.display = 'block';
+        } else {
+            customModelInput.style.display = 'none';
+            modelInput.value = value;
         }
     }
 
@@ -1026,8 +1094,8 @@
         <select class="form-select mb-2" id="vision_api_provider_select" onchange="updateVisionApiProvider(this.value)" aria-label="选择图像识别API提供商">
             <option value="">请选择服务提供商</option>
             <!-- 预设常用选项，减少依赖异步加载 -->
-            <option value="kourichat_global" data-url="https://api.ciallo.ac.cn" data-register="https://api.ciallo.ac.cn">KouriChat API (全球优化)</option>
-            <option value="kourichat_asia" data-url="https://api.kourichat.com" data-register="https://api.kourichat.com">KouriChat API (亚太地区)</option>
+            <option value="kourichat-global" data-url="https://api.ciallo.ac.cn" data-register="https://api.ciallo.ac.cn">KouriChat API (全球优化)</option>
+            <option value="kourichat-asia" data-url="https://api.kourichat.com" data-register="https://api.kourichat.com">KouriChat API (亚太地区)</option>
             <option value="moonshot" data-url="https://api.moonshot.cn/v1" data-register="https://platform.moonshot.cn/console/api-keys">Moonshot AI (推荐)</option>
             <option value="openai" data-url="https://api.openai.com/v1" data-register="https://platform.openai.com/api-keys">OpenAI</option>
             <option value="custom">自定义服务提供商</option>
@@ -1056,13 +1124,13 @@
     let visionModelConfigs = {
         api_providers: [
             {
-                id: "kourichat_global",
+                id: "kourichat-global",
                 name: "KouriChat API (全球优化)",
                 url: "https://api.ciallo.ac.cn",
                 register_url: "https://api.ciallo.ac.cn"
             },
             {
-                id: "kourichat_asia",
+                id: "kourichat-asia",
                 name: "KouriChat API (亚太地区)",
                 url: "https://api.kourichat.com",
                 register_url: "https://api.kourichat.com"
@@ -1081,10 +1149,10 @@
             }
         ],
         models: {
-            "kourichat_global": [
+            "kourichat-global": [
                 {id: "kourichat-vision", name: "KouriChat Vision (推荐)"}
             ],
-            "kourichat_asia": [
+            "kourichat-asia": [
                 {id: "kourichat-vision", name: "KouriChat Vision (推荐)"}
             ],
             "moonshot": [
@@ -1284,10 +1352,10 @@
         
         // 预设一些常用模型选项，确保始终有这些选项
         const defaultModels = {
-            "kourichat_asia": [
+            "kourichat-asia": [
                 {id: "kourichat-vision", name: "KouriChat Vision (推荐)"}
             ],
-            "kourichat_global": [
+            "kourichat-global": [
                 {id: "kourichat-vision", name: "KouriChat Vision (推荐)"}
             ],
             "moonshot": [
@@ -1303,7 +1371,9 @@
         // 如果是自定义提供商或没有选择提供商
         if (providerId === 'custom' || !providerId) {
             modelSelect.disabled = true;
-            customModelInput.style.display = 'block';
+            if (providerId === 'custom') {
+                customModelInput.style.display = 'block';
+            }
             return;
         }
         
@@ -1323,8 +1393,10 @@
             modelSelect.innerHTML += `<option value="${model.id}">${model.name}</option>`;
         });
         
-        // 添加自定义模型选项
-        modelSelect.innerHTML += '<option value="custom">自定义模型</option>';
+        // 仅在自定义提供商模式下添加自定义模型选项
+        if (providerId === 'custom') {
+            modelSelect.innerHTML += '<option value="custom">自定义模型</option>';
+        }
         
         // 设置当前选中的模型
         const currentModel = modelInput.value;
@@ -1332,10 +1404,29 @@
         
         if (modelExists) {
             modelSelect.value = currentModel;
-        } else if (currentModel) {
+            // 确保自定义输入框隐藏
+            customModelInput.style.display = 'none';
+        } else if (currentModel && providerId === 'custom') {
+            // 只有在自定义提供商模式下才显示自定义模型输入框
             modelSelect.value = 'custom';
             customModelInput.style.display = 'block';
             customModelInput.querySelector('input').value = currentModel;
+        } else if (currentModel) {
+            // 对于预设提供商，如果模型不存在，选择第一个可用模型
+            if (models.length > 0) {
+                // 默认选择第一个推荐模型
+                const recommendedModel = models.find(m => m.name.includes('推荐'));
+                if (recommendedModel) {
+                    modelSelect.value = recommendedModel.id;
+                    modelInput.value = recommendedModel.id;
+                } else {
+                    // 没有推荐模型，选择第一个
+                    modelSelect.value = models[0].id;
+                    modelInput.value = models[0].id;
+                }
+            }
+            // 确保自定义输入框隐藏
+            customModelInput.style.display = 'none';
         } else if (models.length > 0) {
             // 默认选择第一个推荐模型
             const recommendedModel = models.find(m => m.name.includes('推荐'));
@@ -1347,6 +1438,8 @@
                 modelSelect.value = models[0].id;
                 modelInput.value = models[0].id;
             }
+            // 确保自定义输入框隐藏
+            customModelInput.style.display = 'none';
         }
     }
     
@@ -1354,16 +1447,17 @@
     function updateVisionModel(value) {
         const modelInput = document.getElementById('VISION_MODEL');
         const customModelInput = document.getElementById('customVisionModelInput');
+        const apiSelect = document.getElementById('vision_api_provider_select');
         
-        if (value === 'custom') {
+        // 只在自定义API提供商模式下才允许自定义模型
+        if (value === 'custom' && apiSelect.value === 'custom') {
             customModelInput.style.display = 'block';
             customModelInput.querySelector('input').focus();
-            return;
-        }
-        
-        customModelInput.style.display = 'none';
-        if (value) {
-            modelInput.value = value;
+        } else {
+            customModelInput.style.display = 'none';
+            if (value) {
+                modelInput.value = value;
+            }
         }
     }
     
@@ -1940,33 +2034,37 @@
                     const config = group[configKey];
                     const element = document.getElementById(configKey);
                     if (element) {
+                        // 获取实际值，即使配置结构发生变化也能获取
+                        const value = config.value !== undefined ? config.value : 
+                                     (config.default !== undefined ? config.default : config);
+                        
                         // 根据元素类型设置值
                         if (element.type === 'checkbox') {
-                            element.checked = config.value;
+                            element.checked = value;
                         } else if (element.tagName === 'SELECT') {
-                            element.value = config.value;
+                            element.value = value;
                         } else {
-                            element.value = config.value;
+                            element.value = value;
                         }
                         
                         // 特殊处理滑块
                         const slider = document.getElementById(`${configKey}_slider`);
                         if (slider) {
-                            slider.value = config.value;
+                            slider.value = value;
                             const display = document.getElementById(`${configKey}_display`);
                             if (display) {
-                                display.textContent = typeof config.value === 'number' ? 
-                                    (configKey === 'TEMPERATURE' ? config.value.toFixed(1) : config.value) : 
-                                    config.value;
+                                display.textContent = typeof value === 'number' ? 
+                                    (configKey === 'TEMPERATURE' ? value.toFixed(1) : value) : 
+                                    value;
                             }
                         }
                         
                         // 特殊处理用户列表
-                        if (configKey === 'LISTEN_LIST' && Array.isArray(config.value)) {
+                        if (configKey === 'LISTEN_LIST' && Array.isArray(value)) {
                             const userListElement = document.getElementById(`selected_users_${configKey}`);
                             if (userListElement) {
                                 userListElement.innerHTML = '';
-                                config.value.forEach(user => {
+                                value.forEach(user => {
                                     if (user) {
                                         const userDiv = document.createElement('div');
                                         userDiv.className = 'list-group-item d-flex justify-content-between align-items-center';
@@ -1979,6 +2077,76 @@
                                         userListElement.appendChild(userDiv);
                                     }
                                 });
+                            }
+                        }
+                        
+                        // 特殊处理图像识别API配置
+                        if (configKey === 'VISION_BASE_URL') {
+                            // 触发BASE_URL选择器更新
+                            const apiSelect = document.getElementById('vision_api_provider_select');
+                            if (apiSelect) {
+                                // 根据值查找匹配的选项
+                                let found = false;
+                                for (let i = 0; i < apiSelect.options.length; i++) {
+                                    const option = apiSelect.options[i];
+                                    if (option.dataset.url === value) {
+                                        apiSelect.value = option.value;
+                                        updateVisionApiProvider(option.value);
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                                
+                                // 如果没有找到匹配项，使用自定义选项
+                                if (!found && value) {
+                                    apiSelect.value = 'custom';
+                                    if (typeof showCustomVisionApiInput === 'function') {
+                                        showCustomVisionApiInput(value);
+                                    }
+                                    if (typeof updateVisionModelSelect === 'function') {
+                                        updateVisionModelSelect('custom');
+                                    }
+                                }
+                            }
+                        }
+                        // 特殊处理DEEPSEEK API配置
+                        else if (configKey === 'DEEPSEEK_BASE_URL') {
+                            // 触发API提供商选择器更新
+                            const apiSelect = document.getElementById('api_provider_select');
+                            if (apiSelect) {
+                                // 根据值查找匹配的选项
+                                let found = false;
+                                for (let i = 0; i < apiSelect.options.length; i++) {
+                                    const option = apiSelect.options[i];
+                                    if (option.dataset.url === value) {
+                                        apiSelect.value = option.value;
+                                        updateApiProvider(option.value);
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                                
+                                // 如果没有找到匹配项，使用自定义选项
+                                if (!found && value) {
+                                    apiSelect.value = 'custom';
+                                    showCustomApiInput(value);
+                                    updateModelSelect('custom');
+                                }
+                            }
+                        }
+                        else if (configKey === 'VISION_MODEL') {
+                            // 尝试更新模型选择器
+                            const modelSelect = document.getElementById('vision_model_select');
+                            if (modelSelect && value) {
+                                modelSelect.value = value;
+                            }
+                        }
+                        // 特殊处理LLM模型
+                        else if (configKey === 'MODEL') {
+                            // 尝试更新LLM模型选择器
+                            const modelSelect = document.getElementById('model_select');
+                            if (modelSelect && value) {
+                                modelSelect.value = value;
                             }
                         }
                     }
@@ -2025,27 +2193,8 @@
                 config['DEEPSEEK_API_KEY'] = apiKeyInput.value;
             }
             
-            // 构建完整的配置数据结构
-            const configData = {
-                categories: {
-                    llm_settings: {
-                        settings: {
-                            base_url: { value: config['DEEPSEEK_BASE_URL'] || '' },
-                            model: { value: config['MODEL'] || '' },
-                            api_key: { value: config['DEEPSEEK_API_KEY'] || '' },
-                            max_tokens: { value: config['MAX_TOKEN'] || 2000 },
-                            temperature: { value: config['TEMPERATURE'] || 1.1 }
-                        }
-                    },
-                    user_settings: {
-                        settings: {
-                            listen_list: { value: config['LISTEN_LIST'] || [] }
-                        }
-                    }
-                }
-            };
-            
-            console.log("发送配置数据:", configData);
+            // 直接发送简单的键值对配置，而不是嵌套结构
+            console.log("发送配置数据:", config);
             
             // 发送保存请求
             fetch('/save', {
@@ -2054,7 +2203,7 @@
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
                 },
-                body: JSON.stringify(configData)
+                body: JSON.stringify(config)
             })
             .then(response => {
                 if (!response.ok) {

@@ -341,6 +341,25 @@ def save_config():
                 try:
                     tasks = value if isinstance(value, list) else (json.loads(value) if isinstance(value, str) else [])
                     logger.debug(f"处理任务数据: {tasks}")
+                    
+                    # 确保schedule_settings结构存在
+                    if 'categories' not in current_config:
+                        current_config['categories'] = {}
+                    if 'schedule_settings' not in current_config['categories']:
+                        current_config['categories']['schedule_settings'] = {
+                            'title': '定时任务配置',
+                            'settings': {}
+                        }
+                    if 'settings' not in current_config['categories']['schedule_settings']:
+                        current_config['categories']['schedule_settings']['settings'] = {}
+                    if 'tasks' not in current_config['categories']['schedule_settings']['settings']:
+                        current_config['categories']['schedule_settings']['settings']['tasks'] = {
+                            'value': [],
+                            'type': 'array',
+                            'description': '定时任务列表'
+                        }
+                    
+                    # 更新任务列表
                     current_config['categories']['schedule_settings']['settings']['tasks']['value'] = tasks
                 except Exception as e:
                     logger.error(f"处理定时任务配置失败: {str(e)}")
@@ -2164,23 +2183,21 @@ def get_all_configs():
             if 'user_settings' in config_data['categories'] and 'settings' in config_data['categories']['user_settings']:
                 configs['基础配置'] = {}
                 if 'listen_list' in config_data['categories']['user_settings']['settings']:
-                    configs['基础配置']['LISTEN_LIST'] = {
-                        'value': config_data['categories']['user_settings']['settings']['listen_list'].get('value', [])
-                    }
+                    configs['基础配置']['LISTEN_LIST'] = config_data['categories']['user_settings']['settings']['listen_list']
             
             # LLM设置
             if 'llm_settings' in config_data['categories'] and 'settings' in config_data['categories']['llm_settings']:
                 llm_settings = config_data['categories']['llm_settings']['settings']
                 if 'api_key' in llm_settings:
-                    configs['基础配置']['DEEPSEEK_API_KEY'] = {'value': llm_settings['api_key'].get('value', '')}
+                    configs['基础配置']['DEEPSEEK_API_KEY'] = llm_settings['api_key']
                 if 'base_url' in llm_settings:
-                    configs['基础配置']['DEEPSEEK_BASE_URL'] = {'value': llm_settings['base_url'].get('value', '')}
+                    configs['基础配置']['DEEPSEEK_BASE_URL'] = llm_settings['base_url']
                 if 'model' in llm_settings:
-                    configs['基础配置']['MODEL'] = {'value': llm_settings['model'].get('value', '')}
+                    configs['基础配置']['MODEL'] = llm_settings['model']
                 if 'max_tokens' in llm_settings:
-                    configs['基础配置']['MAX_TOKEN'] = {'value': llm_settings['max_tokens'].get('value', 2000)}
+                    configs['基础配置']['MAX_TOKEN'] = llm_settings['max_tokens']
                 if 'temperature' in llm_settings:
-                    configs['基础配置']['TEMPERATURE'] = {'value': llm_settings['temperature'].get('value', 1.1)}
+                    configs['基础配置']['TEMPERATURE'] = llm_settings['temperature']
             
             # 媒体设置
             if 'media_settings' in config_data['categories'] and 'settings' in config_data['categories']['media_settings']:
@@ -2191,13 +2208,14 @@ def get_all_configs():
                 if 'image_recognition' in media_settings:
                     img_recog = media_settings['image_recognition']
                     if 'api_key' in img_recog:
-                        configs['图像识别API配置']['VISION_API_KEY'] = {'value': img_recog['api_key'].get('value', '')}
+                        # 保留完整配置，包括元数据
+                        configs['图像识别API配置']['VISION_API_KEY'] = img_recog['api_key']
                     if 'base_url' in img_recog:
-                        configs['图像识别API配置']['VISION_BASE_URL'] = {'value': img_recog['base_url'].get('value', '')}
+                        configs['图像识别API配置']['VISION_BASE_URL'] = img_recog['base_url']
                     if 'temperature' in img_recog:
-                        configs['图像识别API配置']['VISION_TEMPERATURE'] = {'value': img_recog['temperature'].get('value', 0.7)}
+                        configs['图像识别API配置']['VISION_TEMPERATURE'] = img_recog['temperature']
                     if 'model' in img_recog:
-                        configs['图像识别API配置']['VISION_MODEL'] = {'value': img_recog['model'].get('value', '')}
+                        configs['图像识别API配置']['VISION_MODEL'] = img_recog['model']
                 
                 # 图像生成设置
                 '''
@@ -2230,28 +2248,28 @@ def get_all_configs():
                 if 'auto_message' in behavior:
                     auto_msg = behavior['auto_message']
                     if 'content' in auto_msg:
-                        configs['时间配置']['AUTO_MESSAGE'] = {'value': auto_msg['content'].get('value', '')}
+                        configs['时间配置']['AUTO_MESSAGE'] = auto_msg['content']
                     if 'countdown' in auto_msg:
                         if 'min_hours' in auto_msg['countdown']:
-                            configs['时间配置']['MIN_COUNTDOWN_HOURS'] = {'value': auto_msg['countdown']['min_hours'].get('value', 1)}
+                            configs['时间配置']['MIN_COUNTDOWN_HOURS'] = auto_msg['countdown']['min_hours']
                         if 'max_hours' in auto_msg['countdown']:
-                            configs['时间配置']['MAX_COUNTDOWN_HOURS'] = {'value': auto_msg['countdown']['max_hours'].get('value', 3)}
+                            configs['时间配置']['MAX_COUNTDOWN_HOURS'] = auto_msg['countdown']['max_hours']
                 
                 if 'quiet_time' in behavior:
                     quiet = behavior['quiet_time']
                     if 'start' in quiet:
-                        configs['时间配置']['QUIET_TIME_START'] = {'value': quiet['start'].get('value', '')}
+                        configs['时间配置']['QUIET_TIME_START'] = quiet['start']
                     if 'end' in quiet:
-                        configs['时间配置']['QUIET_TIME_END'] = {'value': quiet['end'].get('value', '')}
+                        configs['时间配置']['QUIET_TIME_END'] = quiet['end']
                 
                 # Prompt配置
                 configs['Prompt配置'] = {}
                 if 'context' in behavior:
                     context = behavior['context']
                     if 'max_groups' in context:
-                        configs['Prompt配置']['MAX_GROUPS'] = {'value': context['max_groups'].get('value', 15)}
+                        configs['Prompt配置']['MAX_GROUPS'] = context['max_groups']
                     if 'avatar_dir' in context:
-                        configs['Prompt配置']['AVATAR_DIR'] = {'value': context['avatar_dir'].get('value', '')}
+                        configs['Prompt配置']['AVATAR_DIR'] = context['avatar_dir']
             
             # 定时任务
             if 'schedule_settings' in config_data['categories'] and 'settings' in config_data['categories']['schedule_settings']:
@@ -2279,25 +2297,9 @@ def get_announcement():
     try:
         # 检查公告配置文件是否存在
         if not os.path.exists(ANNOUNCEMENT_CONFIG_PATH):
-            # 如果不存在，创建默认配置
-            default_announcement = {
-                "enabled": True,
-                "title": "系统公告",
-                "content": "欢迎使用KouriChat！这是一个基于人工智能的微信聊天机器人，能够实现角色扮演、智能对话、图像生成与识别、语音消息和持久化记忆等功能。",
-                "updated_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "version": "1.0.0",
-                "type": "info"
-            }
-            
-            # 写入默认配置
-            with open(ANNOUNCEMENT_CONFIG_PATH, 'w', encoding='utf-8') as f:
-                json.dump(default_announcement, f, ensure_ascii=False, indent=4)
-            
-            return jsonify(default_announcement)
-        
         # 读取公告配置
-        with open(ANNOUNCEMENT_CONFIG_PATH, 'r', encoding='utf-8') as f:
-            announcement_config = json.load(f)
+            with open(ANNOUNCEMENT_CONFIG_PATH, 'r', encoding='utf-8') as f:
+                announcement_config = json.load(f)
         
         return jsonify(announcement_config)
     except Exception as e:

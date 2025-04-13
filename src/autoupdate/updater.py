@@ -22,9 +22,9 @@ logger = logging.getLogger(__name__)
 
 class Updater:
     # GitHub仓库信息
-    REPO_OWNER = "KouriChat"
-    REPO_NAME = "KouriChat"
-    REPO_BRANCH = "Kourichat-Festival-Test"
+    REPO_OWNER = "tataqioko"
+    REPO_NAME = "Kourichat-Exploration"
+    REPO_BRANCH = "main"  # 假设使用main分支，如果有其他分支请相应调整
     GITHUB_API = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}"
     
     # 需要跳过的文件和文件夹（不会被更新）
