@@ -1,7 +1,9 @@
 import os
 import shutil
+import json
 from flask import Blueprint, jsonify, request
 from pathlib import Path
+from datetime import datetime
 
 avatar_bp = Blueprint('avatar', __name__)
 
@@ -228,6 +230,176 @@ def save_avatar_raw():
         # 保存原始内容
         with open(avatar_file, 'w', encoding='utf-8') as f:
             f.write(content)
+            
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@avatar_bp.route('/load_core_memory')
+def load_core_memory():
+    """加载角色的核心记忆内容"""
+    try:
+        avatar_name = request.args.get('avatar')
+        if not avatar_name:
+            return jsonify({'status': 'error', 'message': '未提供角色名称'})
+            
+        memory_path = AVATARS_DIR / avatar_name / 'memory' / 'core_memory.json'
+        
+        # 如果记忆文件不存在，则返回空内容
+        if not memory_path.exists():
+            # 创建记忆目录
+            memory_dir = AVATARS_DIR / avatar_name / 'memory'
+            memory_dir.mkdir(exist_ok=True)
+            
+            # 创建空的核心记忆文件
+            with open(memory_path, 'w', encoding='utf-8') as f:
+                json.dump({"timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "content": ""}, f, ensure_ascii=False, indent=2)
+            
+            return jsonify({'status': 'success', 'content': ''})
+            
+        # 读取核心记忆文件
+        with open(memory_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            content = data.get('content', '')
+            
+        return jsonify({'status': 'success', 'content': content})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@avatar_bp.route('/save_core_memory', methods=['POST'])
+def save_core_memory():
+    """保存角色的核心记忆内容"""
+    try:
+        data = request.get_json()
+        avatar_name = data.get('avatar')
+        content = data.get('content', '')
+        
+        if not avatar_name:
+            return jsonify({'status': 'error', 'message': '未提供角色名称'})
+            
+        # 确保记忆目录存在
+        memory_dir = AVATARS_DIR / avatar_name / 'memory'
+        memory_dir.mkdir(exist_ok=True)
+        
+        memory_path = memory_dir / 'core_memory.json'
+        
+        # 保存核心记忆
+        memory_data = {
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "content": content
+        }
+        
+        with open(memory_path, 'w', encoding='utf-8') as f:
+            json.dump(memory_data, f, ensure_ascii=False, indent=2)
+            
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@avatar_bp.route('/load_short_memory')
+def load_short_memory():
+    """加载角色的短期记忆内容"""
+    try:
+        avatar_name = request.args.get('avatar')
+        if not avatar_name:
+            return jsonify({'status': 'error', 'message': '未提供角色名称'})
+            
+        memory_path = AVATARS_DIR / avatar_name / 'memory' / 'short_memory.json'
+        
+        # 如果记忆文件不存在，则返回空内容
+        if not memory_path.exists():
+            # 创建记忆目录
+            memory_dir = AVATARS_DIR / avatar_name / 'memory'
+            memory_dir.mkdir(exist_ok=True)
+            
+            # 创建空的短期记忆文件
+            with open(memory_path, 'w', encoding='utf-8') as f:
+                json.dump([], f, ensure_ascii=False, indent=2)
+            
+            return jsonify({'status': 'success', 'conversations': []})
+            
+        # 读取短期记忆文件
+        with open(memory_path, 'r', encoding='utf-8') as f:
+            conversations = json.load(f)
+            
+        return jsonify({'status': 'success', 'conversations': conversations})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@avatar_bp.route('/save_short_memory', methods=['POST'])
+def save_short_memory():
+    """保存角色的短期记忆内容"""
+    try:
+        data = request.get_json()
+        avatar_name = data.get('avatar')
+        conversations = data.get('conversations', [])
+        
+        if not avatar_name:
+            return jsonify({'status': 'error', 'message': '未提供角色名称'})
+            
+        # 确保记忆目录存在
+        memory_dir = AVATARS_DIR / avatar_name / 'memory'
+        memory_dir.mkdir(exist_ok=True)
+        
+        memory_path = memory_dir / 'short_memory.json'
+        
+        # 保存短期记忆
+        with open(memory_path, 'w', encoding='utf-8') as f:
+            json.dump(conversations, f, ensure_ascii=False, indent=2)
+            
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@avatar_bp.route('/clear_short_memory', methods=['POST'])
+def clear_short_memory():
+    """清空角色的短期记忆内容"""
+    try:
+        data = request.get_json()
+        avatar_name = data.get('avatar')
+        
+        if not avatar_name:
+            return jsonify({'status': 'error', 'message': '未提供角色名称'})
+            
+        # 确保记忆目录存在
+        memory_dir = AVATARS_DIR / avatar_name / 'memory'
+        memory_dir.mkdir(exist_ok=True)
+        
+        memory_path = memory_dir / 'short_memory.json'
+        
+        # 清空短期记忆
+        with open(memory_path, 'w', encoding='utf-8') as f:
+            json.dump([], f, ensure_ascii=False, indent=2)
+            
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+# 添加清空核心记忆的路由
+@avatar_bp.route('/clear_core_memory', methods=['POST'])
+def clear_core_memory():
+    """清空角色的核心记忆内容"""
+    try:
+        data = request.get_json()
+        avatar_name = data.get('avatar')
+        
+        if not avatar_name:
+            return jsonify({'status': 'error', 'message': '未提供角色名称'})
+            
+        # 确保记忆目录存在
+        memory_dir = AVATARS_DIR / avatar_name / 'memory'
+        memory_dir.mkdir(exist_ok=True)
+        
+        memory_path = memory_dir / 'core_memory.json'
+        
+        # 清空核心记忆，但保留文件结构
+        memory_data = {
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "content": ""
+        }
+        
+        with open(memory_path, 'w', encoding='utf-8') as f:
+            json.dump(memory_data, f, ensure_ascii=False, indent=2)
             
         return jsonify({'status': 'success'})
     except Exception as e:

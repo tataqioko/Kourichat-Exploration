@@ -488,7 +488,7 @@
                 const selector = document.querySelector('.avatar-selector');
                 const viewRawBtn = document.createElement('button');
                 viewRawBtn.className = 'btn btn-outline-secondary';
-                viewRawBtn.innerHTML = '<i class="bi bi-code-slash"></i> 查看原始MD';
+                viewRawBtn.innerHTML = '<i class="bi bi-markdown"></i> 查看原始MD';
                 viewRawBtn.title = '查看原始Markdown内容';
                 viewRawBtn.addEventListener('click', function() {
                     // 创建模态框
@@ -499,17 +499,14 @@
                     modalDiv.setAttribute('aria-labelledby', 'rawContentModalLabel');
                     modalDiv.setAttribute('aria-hidden', 'true');
                     
-                    // 检测当前是否为深色模式
-                    const isDarkMode = document.body.getAttribute('data-bs-theme') === 'dark';
-                    
                     modalDiv.innerHTML = `
                         <div class="modal-dialog modal-lg">
-                            <div class="modal-content ${isDarkMode ? 'bg-dark text-light' : ''}">
-                                <div class="modal-header ${isDarkMode ? 'border-secondary' : ''}">
-                                    <h5 class="modal-title" id="rawContentModalLabel">原始Markdown内容</h5>
-                                    <button type="button" class="btn-close ${isDarkMode ? 'btn-close-white' : ''}" data-bs-dismiss="modal" aria-label="Close"></button>
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="rawContentModalLabel">${currentAvatar} - 原始Markdown内容</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                 </div>
-                                <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                                <div class="modal-body">
                                     <div class="mb-3">
                                         <div class="d-flex justify-content-end mb-2">
                                             <button type="button" class="btn btn-sm btn-outline-secondary me-2" id="copyMdBtn">
@@ -519,14 +516,14 @@
                                                 <i class="bi bi-trash"></i> 清空
                                             </button>
                                         </div>
-                                        <textarea class="form-control ${isDarkMode ? 'bg-dark text-light' : ''}" 
-                                            id="rawMdContent" 
-                                            style="min-height: 400px; max-height: 60vh; font-family: monospace; overflow-y: auto;"
+                                        <textarea class="form-control" 
+                                            id="rawMdContent" rows="15"
+                                            style="min-height: 400px; max-height: 60vh; resize: vertical; overflow-y: auto; font-family: monospace;"
                                         >${rawContent}</textarea>
                                     </div>
                                 </div>
-                                <div class="modal-footer ${isDarkMode ? 'border-secondary' : ''}">
-                                    <button type="button" class="btn ${isDarkMode ? 'btn-outline-light' : 'btn-secondary'}" data-bs-dismiss="modal">取消</button>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
                                     <button type="button" class="btn btn-primary" id="saveMdBtn">保存修改</button>
                                 </div>
                             </div>
@@ -592,7 +589,256 @@
                     });
                 });
                 
+                // 添加编辑核心记忆按钮
+                const editCoreMemoryBtn = document.createElement('button');
+                editCoreMemoryBtn.className = 'btn btn-outline-secondary';
+                editCoreMemoryBtn.innerHTML = '<i class="bi bi-database-fill"></i> 编辑核心记忆';
+                editCoreMemoryBtn.title = '编辑角色的核心记忆';
+                editCoreMemoryBtn.addEventListener('click', function() {
+                    // 获取当前选中的角色名称
+                    const currentAvatar = document.getElementById('avatarSelector').value;
+                    
+                    // 加载核心记忆内容
+                    fetch(`/load_core_memory?avatar=${currentAvatar}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'success') {
+                                // 创建一个模态框来编辑核心记忆
+                                const modalHTML = `
+                                <div class="modal fade" id="coreMemoryModal" tabindex="-1" aria-labelledby="coreMemoryModalLabel" aria-hidden="true">
+                                    <div class="modal-dialog modal-lg">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title" id="coreMemoryModalLabel">${currentAvatar} - 核心记忆编辑</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <div class="mb-3">
+                                                    <label for="coreMemoryContent" class="form-label">核心记忆内容</label>
+                                                    <div class="alert alert-info mb-2">
+                                                        <i class="bi bi-info-circle-fill"></i> 核心记忆是角色对用户的永久印象，会在每次对话中被使用。格式为JSON数组，请谨慎编辑，确保格式正确。 
+                                                    </div>
+                                                    <textarea class="form-control" id="coreMemoryContent" rows="8" 
+                                                        style="min-height: 200px; max-height: 50vh; resize: vertical; overflow-y: auto;">${data.content || ''}</textarea>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                                                <button type="button" class="btn btn-danger" id="clearCoreMemoryBtn">清空核心记忆</button>
+                                                <button type="button" class="btn btn-primary" id="saveCoreMemoryBtn">保存</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                `;
+                                
+                                // 添加模态框到body
+                                document.body.insertAdjacentHTML('beforeend', modalHTML);
+                                
+                                // 显示模态框
+                                const modal = new bootstrap.Modal(document.getElementById('coreMemoryModal'));
+                                modal.show();
+                                
+                                // 保存按钮点击事件
+                                document.getElementById('saveCoreMemoryBtn').addEventListener('click', function() {
+                                    const memoryContent = document.getElementById('coreMemoryContent').value;
+                                    
+                                    // 保存核心记忆
+                                    fetch('/save_core_memory', {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                        },
+                                        body: JSON.stringify({
+                                            avatar: currentAvatar,
+                                            content: memoryContent
+                                        })
+                                    })
+                                    .then(response => response.json())
+                                    .then(data => {
+                                        if (data.status === 'success') {
+                                            showToast('核心记忆保存成功', 'success');
+                                            modal.hide();
+                                            
+                                            // 移除模态框
+                                            document.getElementById('coreMemoryModal').remove();
+                                        } else {
+                                            showToast('保存失败: ' + data.message, 'error');
+                                        }
+                                    })
+                                    .catch(error => {
+                                        showToast('保存失败: ' + error, 'error');
+                                    });
+                                });
+                                
+                                // 清空核心记忆按钮点击事件
+                                document.getElementById('clearCoreMemoryBtn').addEventListener('click', function() {
+                                    if (confirm('确定要清空核心记忆吗？此操作无法撤销！')) {
+                                        fetch('/clear_core_memory', {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                            },
+                                            body: JSON.stringify({
+                                                avatar: currentAvatar
+                                            })
+                                        })
+                                        .then(response => response.json())
+                                        .then(data => {
+                                            if (data.status === 'success') {
+                                                showToast('核心记忆已清空', 'success');
+                                                document.getElementById('coreMemoryContent').value = '';
+                                            } else {
+                                                showToast('清空失败: ' + data.message, 'error');
+                                            }
+                                        })
+                                        .catch(error => {
+                                            showToast('清空失败: ' + error, 'error');
+                                        });
+                                    }
+                                });
+                                
+                                // 模态框关闭事件
+                                document.getElementById('coreMemoryModal').addEventListener('hidden.bs.modal', function() {
+                                    this.remove();
+                                });
+                            } else {
+                                showToast('加载核心记忆失败: ' + data.message, 'error');
+                            }
+                        })
+                        .catch(error => {
+                            showToast('加载核心记忆失败: ' + error, 'error');
+                        });
+                });
+                
+                // 添加编辑短期记忆按钮
+                const editShortMemoryBtn = document.createElement('button');
+                editShortMemoryBtn.className = 'btn btn-outline-secondary';
+                editShortMemoryBtn.innerHTML = '<i class="bi bi-chat-dots"></i> 编辑短期记忆';
+                editShortMemoryBtn.title = '编辑角色的短期记忆对话历史';
+                editShortMemoryBtn.addEventListener('click', function() {
+                    // 获取当前选中的角色名称
+                    const currentAvatar = document.getElementById('avatarSelector').value;
+                    
+                    // 加载短期记忆内容
+                    fetch(`/load_short_memory?avatar=${currentAvatar}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'success') {
+                                // 创建一个模态框来编辑短期记忆
+                                const modalHTML = `
+                                <div class="modal fade" id="shortMemoryModal" tabindex="-1" aria-labelledby="shortMemoryModalLabel" aria-hidden="true">
+                                    <div class="modal-dialog modal-xl">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title" id="shortMemoryModalLabel">${currentAvatar} - 短期记忆对话编辑</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <div class="mb-3">
+                                                    <div class="alert alert-warning">
+                                                        <i class="bi bi-exclamation-triangle-fill"></i> 短期记忆包含最近的对话历史，格式为JSON数组。请谨慎编辑，确保格式正确。
+                                                    </div>
+                                                    <textarea class="form-control" id="shortMemoryContent" rows="15" 
+                                                        style="min-height: 300px; max-height: 60vh; resize: vertical; overflow-y: auto; font-family: monospace;">${JSON.stringify(data.conversations || [], null, 2)}</textarea>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                                                <button type="button" class="btn btn-danger" id="clearShortMemoryBtn">清空短期记忆</button>
+                                                <button type="button" class="btn btn-primary" id="saveShortMemoryBtn">保存</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                `;
+                                
+                                // 添加模态框到body
+                                document.body.insertAdjacentHTML('beforeend', modalHTML);
+                                
+                                // 显示模态框
+                                const modal = new bootstrap.Modal(document.getElementById('shortMemoryModal'));
+                                modal.show();
+                                
+                                // 保存按钮点击事件
+                                document.getElementById('saveShortMemoryBtn').addEventListener('click', function() {
+                                    try {
+                                        const memoryContent = JSON.parse(document.getElementById('shortMemoryContent').value);
+                                        
+                                        // 保存短期记忆
+                                        fetch('/save_short_memory', {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                            },
+                                            body: JSON.stringify({
+                                                avatar: currentAvatar,
+                                                conversations: memoryContent
+                                            })
+                                        })
+                                        .then(response => response.json())
+                                        .then(data => {
+                                            if (data.status === 'success') {
+                                                showToast('短期记忆保存成功', 'success');
+                                                modal.hide();
+                                                
+                                                // 移除模态框
+                                                document.getElementById('shortMemoryModal').remove();
+                                            } else {
+                                                showToast('保存失败: ' + data.message, 'error');
+                                            }
+                                        })
+                                        .catch(error => {
+                                            showToast('保存失败: ' + error, 'error');
+                                        });
+                                    } catch (e) {
+                                        showToast('JSON格式错误: ' + e.message, 'error');
+                                    }
+                                });
+                                
+                                // 清空短期记忆按钮点击事件
+                                document.getElementById('clearShortMemoryBtn').addEventListener('click', function() {
+                                    if (confirm('确定要清空短期记忆吗？此操作无法撤销！')) {
+                                        fetch('/clear_short_memory', {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                            },
+                                            body: JSON.stringify({
+                                                avatar: currentAvatar
+                                            })
+                                        })
+                                        .then(response => response.json())
+                                        .then(data => {
+                                            if (data.status === 'success') {
+                                                showToast('短期记忆已清空', 'success');
+                                                document.getElementById('shortMemoryContent').value = '[]';
+                                            } else {
+                                                showToast('清空失败: ' + data.message, 'error');
+                                            }
+                                        })
+                                        .catch(error => {
+                                            showToast('清空失败: ' + error, 'error');
+                                        });
+                                    }
+                                });
+                                
+                                // 模态框关闭事件
+                                document.getElementById('shortMemoryModal').addEventListener('hidden.bs.modal', function() {
+                                    this.remove();
+                                });
+                            } else {
+                                showToast('加载短期记忆失败: ' + data.message, 'error');
+                            }
+                        })
+                        .catch(error => {
+                            showToast('加载短期记忆失败: ' + error, 'error');
+                        });
+                });
+                
                 selector.appendChild(viewRawBtn);
+                selector.appendChild(editCoreMemoryBtn);
+                selector.appendChild(editShortMemoryBtn);
             }
             
             // 监听人设选择器变化

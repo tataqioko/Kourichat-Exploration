@@ -2295,16 +2295,33 @@ def get_all_configs():
 def get_announcement():
     """获取公告配置信息"""
     try:
-        # 检查公告配置文件是否存在
-        if not os.path.exists(ANNOUNCEMENT_CONFIG_PATH):
         # 读取公告配置
-            with open(ANNOUNCEMENT_CONFIG_PATH, 'r', encoding='utf-8') as f:
-                announcement_config = json.load(f)
+        with open(ANNOUNCEMENT_CONFIG_PATH, 'r', encoding='utf-8') as f:
+            announcement_config = json.load(f)
+        
+        # 读取版本信息
+        version_file = os.path.join(ROOT_DIR, 'version.json')
+        if os.path.exists(version_file):
+            with open(version_file, 'r', encoding='utf-8') as f:
+                version_info = json.load(f)
+                # 更新公告内容，使用HTML格式化以支持更好的换行和显示
+                base_content = announcement_config['content']
+                version_content = f"""
+<div class="mt-3 pt-3 border-top">
+    <div class="mb-2"><strong>当前版本：</strong>{version_info['version']}</div>
+    <div class="mb-2"><strong>更新时间：</strong>{version_info['last_update']}</div>
+    <div><strong>更新内容：</strong><br>{version_info['description'].replace(',', '<br>')}</div>
+</div>
+"""
+                announcement_config['content'] = base_content + version_content
+                announcement_config['version'] = version_info['version']
         
         return jsonify(announcement_config)
     except Exception as e:
-        logger.error(f"获取公告配置失败: {str(e)}")
-        return jsonify({"enabled": False, "title": "", "content": "", "type": "info"})
+        return jsonify({
+            'status': 'error',
+            'message': f'读取公告配置失败: {str(e)}'
+        }), 500
 
 @app.route('/get_vision_api_configs')
 def get_vision_api_configs():

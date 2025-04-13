@@ -37,6 +37,9 @@
     <link href="/static/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdmirror.com/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     
+    <!-- Bootstrap JavaScript 库 -->
+    <script src="/static/js/bootstrap.bundle.min.js"></script>
+    
     <!-- 添加结构化数据 -->
     <script type="application/ld+json">
     {
@@ -516,6 +519,34 @@
             font-size: 0.8rem;
             padding: 0.25rem;
         }
+        
+        .log-line:hover {
+            background-color: rgba(0, 0, 0, 0.05);
+        }
+        
+        /* 公告模态框样式 */
+        .announcement-body {
+            max-height: 65vh;
+            overflow-y: auto;
+            padding: 1.5rem;
+            line-height: 1.6;
+        }
+        
+        #announcementContent {
+            font-size: 1.05rem;
+        }
+        
+        #announcementContent strong {
+            color: var(--primary-color);
+        }
+        
+        #announcementContent .border-top {
+            border-top: 1px solid rgba(0,0,0,0.1) !important;
+        }
+        
+        [data-bs-theme="dark"] #announcementContent .border-top {
+            border-top: 1px solid rgba(255,255,255,0.1) !important;
+        }
     </style>
     <!-- 添加 dark-mode.js -->
     <script src="/static/js/bootstrap.bundle.min.js"></script>
@@ -954,16 +985,17 @@
 
     <!-- 公告提示模态框 -->
     <div class="modal fade" id="announcementModal" tabindex="-1" aria-labelledby="announcementModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="announcementModalLabel"></h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
-                    <p id="announcementContent"></p>
+                <div class="modal-body announcement-body">
+                    <div id="announcementContent"></div>
                 </div>
-                <div class="modal-footer justify-content-end">
+                <div class="modal-footer justify-content-between">
+                    <small class="text-muted">注意：每次程序启动后，控制面板会自动获取更新情况，请用户留意</small>
                     <button type="button" class="btn btn-primary" data-bs-dismiss="modal" id="announcementOkBtn">我知道了</button>
                 </div>
             </div>
@@ -1819,7 +1851,7 @@
                         if (data.enabled) {
                             // 设置公告内容
                             document.getElementById('announcementModalLabel').textContent = data.title;
-                            document.getElementById('announcementContent').textContent = data.content;
+                            document.getElementById('announcementContent').innerHTML = data.content;
                             
                             // 根据公告类型设置样式
                             const modalHeader = document.querySelector('#announcementModal .modal-header');
@@ -1840,8 +1872,7 @@
                             // 标记在此会话中已显示公告
                             sessionStorage.setItem('announcement_shown', 'true');
                         }
-                    })
-                    .catch(error => console.error('获取公告失败:', error));
+                    });
             }
             
             // 处理"我知道了"按钮点击事件

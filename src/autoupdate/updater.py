@@ -159,7 +159,7 @@ class Updater:
                 # 只有当最新版本大于当前版本时才返回更新信息
                 if latest_ver_tuple > current_ver_tuple:
                     # 使用正确的GitHub zip下载地址格式
-                    download_url = f"https://github.com/{self.REPO_OWNER}/{self.REPO_NAME}/archive/{self.REPO_BRANCH}.zip"
+                    download_url = f"https://github.com/{self.REPO_OWNER}/{self.REPO_NAME}/archive/refs/heads/{self.REPO_BRANCH}.zip"
                     
                     # 确保下载URL也使用代理
                     proxied_download_url = self.get_proxy_url(download_url)
