@@ -62,7 +62,7 @@
                         "is_secret": true
                     },
                     "base_url": {
-                        "value": "https://api.kourichat.com",
+                        "value": "https://api.kourichat.com/v1",
                         "type": "string",
                         "description": "图像识别API基础URL"
                     },
@@ -71,7 +71,7 @@
                         "type": "number",
                         "description": "图像识别温度参数",
                         "min": 0,
-                        "max": 2
+                        "max": 1
                     },
                     "model": {
                         "value": "kourichat-vision",

@@ -55,9 +55,9 @@ init()
 wait = 1
 
 class ChatBot:
-    def __init__(self, message_handler, moonshot_ai, auto_sender, emoji_handler):
+    def __init__(self, message_handler, image_recognition_service, auto_sender, emoji_handler):
         self.message_handler = message_handler
-        self.moonshot_ai = moonshot_ai
+        self.image_recognition_service = image_recognition_service
         self.auto_sender = auto_sender
         self.emoji_handler = emoji_handler
         self.user_queues = {}  # 将user_queues移到类的实例变量
@@ -130,7 +130,7 @@ class ChatBot:
                 content = None
 
             if img_path:
-                recognized_text = self.moonshot_ai.recognize_image(img_path, is_emoji)
+                recognized_text = self.image_recognition_service.recognize_image(img_path, is_emoji)
                 content = recognized_text if content is None else f"{content} {recognized_text}"
                 is_image_recognition = True
 
@@ -176,7 +176,7 @@ memory_service = MemoryService(
     max_token=MAX_TOKEN,
     temperature=TEMPERATURE
 )
-moonshot_ai = ImageRecognitionService(
+image_recognition_service = ImageRecognitionService(
     api_key=config.media.image_recognition.api_key,
     base_url=config.media.image_recognition.base_url,
     temperature=config.media.image_recognition.temperature,
@@ -208,7 +208,7 @@ message_handler = MessageHandler(
 auto_sender = AutoSendHandler(message_handler, config, listen_list)
 
 # 创建聊天机器人实例
-chat_bot = ChatBot(message_handler, moonshot_ai, auto_sender, emoji_handler)
+chat_bot = ChatBot(message_handler, image_recognition_service, auto_sender, emoji_handler)
 
 # 启动主动消息倒计时
 auto_sender.start_countdown()

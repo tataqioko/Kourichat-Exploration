@@ -227,7 +227,7 @@ def parse_config_groups() -> Dict[str, Dict[str, Any]]:
                     "description": "温度参数",
                     "type": "number",
                     "min": 0.0,
-                    "max": 2.0
+                    "max": 1.0
                 }
             }
         )
@@ -2355,7 +2355,7 @@ def get_vision_api_configs():
             {
                 "id": "kourichat-global",
                 "name": "KouriChat API (全球优化)",
-                "url": "https://api.ciallo.ac.cn",
+                "url": "https://api.ciallo.ac.cn/v1",
                 "register_url": "https://api.ciallo.ac.cn/register",
                 "status": "active",
                 "priority": 1
@@ -2363,7 +2363,7 @@ def get_vision_api_configs():
             {
                 "id": "kourichat-asia",
                 "name": "KouriChat API (亚太备线)",
-                "url": "https://api.kourichat.com",
+                "url": "https://api.kourichat.com/v1",
                 "register_url": "https://api.kourichat.com/register",
                 "status": "active",
                 "priority": 2
@@ -2390,11 +2390,11 @@ def get_vision_api_configs():
         vision_models = {
             "kourichat-global": [
                 {"id": "kourichat-vision", "name": "KouriChat Vision", "status": "active"},
-                {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash", "status": "active"}
+                {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro", "status": "active"}
             ],
             "kourichat-asia": [
                 {"id": "kourichat-vision", "name": "kourichat-vision"},
-                {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash"}
+                {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro"}
             ],
             "moonshot": [
                 {"id": "moonshot-v1-8k-vision-preview", "name": "moonshot-v1-8k-vision-preview"}
