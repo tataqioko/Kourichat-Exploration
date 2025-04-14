@@ -105,9 +105,9 @@ class ImageRecognitionService:
                 if is_emoji:
                     if "最后一张表情包是" in recognized_text:
                         recognized_text = recognized_text.split("最后一张表情包是", 1)[1].strip()
-                    recognized_text = "发送了表情包：" + recognized_text
+                    recognized_text = "用户发送了一张表情包，表情包的内容是：：" + recognized_text
                 else:
-                    recognized_text = "发送了图片：" + recognized_text
+                    recognized_text = "用户发送了一张照片，照片的内容是：" + recognized_text
 
                 logger.info(f"Moonshot AI图片识别结果: {recognized_text}")
                 return recognized_text
