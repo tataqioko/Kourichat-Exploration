@@ -2353,18 +2353,18 @@ def get_vision_api_configs():
         # 构建图像识别API提供商列表
         vision_providers = [
             {
-                "id": "kourichat_global",
+                "id": "kourichat-global",
                 "name": "KouriChat API (全球优化)",
                 "url": "https://api.ciallo.ac.cn",
-                "register_url": "https://api.ciallo.ac.cn",
+                "register_url": "https://api.ciallo.ac.cn/register",
                 "status": "active",
                 "priority": 1
             },
             {
-                "id": "kourichat_asia",
+                "id": "kourichat-asia",
                 "name": "KouriChat API (亚太备线)",
                 "url": "https://api.kourichat.com",
-                "register_url": "https://api.kourichat.com",
+                "register_url": "https://api.kourichat.com/register",
                 "status": "active",
                 "priority": 2
             },
@@ -2384,23 +2384,17 @@ def get_vision_api_configs():
                 "status": "active",
                 "priority": 4
             },
-            {
-                "id": "zhipu",
-                "name": "智谱 AI",
-                "url": "https://open.bigmodel.cn/api/paas/v4",
-                "register_url": "https://open.bigmodel.cn/usercenter/apikeys",
-                "status": "active",
-                "priority": 5
-            }
         ]
         
         # 构建模型配置 - 只包含支持图像识别的模型
         vision_models = {
-            "kourichat_global": [
-                {"id": "kourichat-vision", "name": "KouriChat Vision", "status": "active"}
+            "kourichat-global": [
+                {"id": "kourichat-vision", "name": "KouriChat Vision", "status": "active"},
+                {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash", "status": "active"}
             ],
-            "kourichat_asia": [
-                {"id": "kourichat-vision", "name": "kourichat-vision"}
+            "kourichat-asia": [
+                {"id": "kourichat-vision", "name": "kourichat-vision"},
+                {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash"}
             ],
             "moonshot": [
                 {"id": "moonshot-v1-8k-vision-preview", "name": "moonshot-v1-8k-vision-preview"}

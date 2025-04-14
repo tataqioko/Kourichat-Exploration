@@ -2,6 +2,7 @@
 !data/avatars/ATRI/
 !data/avatars/MONO/
 !data/avatars/Nijiko/
+/data/voices/*
 # Database
 *.db
 *.sqlite
