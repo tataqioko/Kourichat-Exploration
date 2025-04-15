@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -102,15 +102,6 @@
             outline: none;
         }
 
-        /* 注释掉这个可能影响导航栏开关尺寸的全局样式 */
-        /*
-        .form-switch .form-check-input {
-            width: 3em;
-            height: 1.5em;
-            margin-left: -3.5em;
-        }
-        */
-
         .form-label {
             display: flex;
             align-items: center;
@@ -166,29 +157,6 @@
             backdrop-filter: blur(10px);
             border-bottom: 1px solid var(--card-border);
         }
-        /* 移除重复的导航栏相关样式 */
-        /*
-        .navbar .form-check.form-switch {
-            display: flex;
-            align-items: center;
-            height: 100%;
-            margin: 0;
-        }
-
-
-        .navbar .form-check-label {
-            display: flex;
-            align-items: center;
-            margin: 0 0 0 8px;
-            line-height: 1;
-        }
-
-
-        .navbar .form-check-input {
-            margin: 0;
-            vertical-align: middle;
-        }
-        */
 
         /* 输入框组样式 */
         .input-group {
@@ -610,7 +578,7 @@
 {% elif key == 'DEEPSEEK_BASE_URL' %}
     <div class="mb-3">
         <select class="form-select mb-2" id="api_provider_select" onchange="updateApiProvider(this.value)" aria-label="选择API提供商">
-            <option value="">请选择服务提供商</option>
+            <!-- 移除请选择服务提供商选项 -->
             <!-- 预设常用选项，减少依赖异步加载 -->
             <option value="kourichat-global" data-url="https://api.ciallo.ac.cn/v1" data-register="https://api.kourichat.com/register">KouriChat API (全球优化)</option>
             <option value="kourichat-asia" data-url="https://api.kourichat.com/v1" data-register="https://api.kourichat.com/register">KouriChat API (亚太备线)</option>
@@ -670,6 +638,7 @@
         // 根据当前配置设置初始值
         const currentUrl = document.getElementById('DEEPSEEK_BASE_URL').value;
         const apiSelect = document.getElementById('api_provider_select');
+        const currentModel = document.getElementById('MODEL').value;
         const hiddenInput = document.querySelector(`input[name="DEEPSEEK_BASE_URL"]`);
         
         // 查找匹配的选项
@@ -688,6 +657,25 @@
         if (!found && currentUrl) {
             apiSelect.value = 'custom';
             showCustomApiInput(currentUrl);
+            
+            // 对于自定义API提供商，显示自定义模型输入框并设置值
+            const customModelInput = document.getElementById('customModelInput');
+            if (customModelInput && currentModel) {
+                customModelInput.style.display = 'block';
+                customModelInput.querySelector('input').value = currentModel;
+                
+                // 设置模型选择框
+                const modelSelect = document.getElementById('model_select');
+                if (modelSelect) {
+                    // 添加自定义选项
+                    if (!modelSelect.querySelector('option[value="custom"]')) {
+                        modelSelect.innerHTML += '<option value="custom">自定义模型</option>';
+                    }
+                    modelSelect.value = 'custom';
+                }
+            }
+            
+            // 自定义模式下更新模型选择
             updateModelSelect('custom');
         }
         
@@ -831,7 +819,7 @@
 {% elif key == 'MODEL' %}
     <div class="mb-3">
         <select class="form-select mb-2" id="model_select" onchange="updateModel(this.value)" aria-label="选择模型">
-            <option value="">请选择模型</option>
+            <!-- 移除请选择模型选项 -->
         </select>
 
         <!-- 添加自定义模型输入框 -->
@@ -853,7 +841,9 @@
     // 初始化模型选择框 - 直接显示当前模型，不依赖API调用
     function initializeModelSelect() {
         const modelSelect = document.getElementById('model_select');
-        const currentModel = document.getElementById('MODEL').value;
+        const modelInput = document.getElementById('MODEL');
+        const currentModel = modelInput.value;
+        const customModelInput = document.getElementById('customModelInput');
         
         // 预设一些常用模型选项，确保始终有这些选项
         const defaultModels = [
@@ -885,14 +875,17 @@
             if (!existingOption) {
                 // 如果不存在，设置为自定义模型
                 modelSelect.value = 'custom';
-                const customModelInput = document.getElementById('customModelInput');
-                customModelInput.style.display = 'block';
-                customModelInput.querySelector('input').value = currentModel;
+                if (customModelInput) {
+                    customModelInput.style.display = 'block';
+                    customModelInput.querySelector('input').value = currentModel;
+                }
             } else {
                 // 如果存在，选中它
                 modelSelect.value = currentModel;
                 // 确保自定义输入框隐藏
-                document.getElementById('customModelInput').style.display = 'none';
+                if (customModelInput) {
+                    customModelInput.style.display = 'none';
+                }
             }
         }
     }
@@ -900,128 +893,106 @@
     // 更新模型选择框
     async function updateModelSelect(providerId) {
         const modelSelect = document.getElementById('model_select');
-        modelSelect.innerHTML = '<option value="">请选择模型</option>';
+        const modelInput = document.getElementById('MODEL');
+        const customModelInput = document.getElementById('customModelInput');
+        
+        // 保存当前模型值，确保后续操作不会丢失
+        const currentModelValue = modelInput.value;
+        
+        // 重置选择框 - 移除"请选择模型"选项
+        modelSelect.innerHTML = '';
 
         if (providerId === 'custom') {
             modelSelect.innerHTML += '<option value="custom">自定义模型</option>';
             modelSelect.value = 'custom';
-            document.getElementById('customModelInput').style.display = 'block';
+            
+            // 显示自定义输入框并设置当前值
+            customModelInput.style.display = 'block';
+            customModelInput.querySelector('input').value = currentModelValue;
             return;
         }
 
         if (!providerId) return;
 
-        // 仅当选择'custom'提供商时添加自定义模型选项
-        if (providerId === 'custom') {
-            modelSelect.innerHTML += '<option value="custom">自定义模型</option>';
-        }
-
         // 保存当前选中的模型，以便后面恢复
-        const currentModel = document.getElementById('MODEL').value;
+        const currentModel = modelInput.value;
         
         try {
-            // 如果是 Ollama，尝试获取本地模型列表
-            if (providerId === 'ollama') {
+            // 加载该提供商下的模型列表
+            let models = [];
+            
+            // 如果已缓存配置数据
+            if (modelConfigs && modelConfigs.models && modelConfigs.models[providerId]) {
+                models = modelConfigs.models[providerId];
+            } else {
+                // 尝试从服务器加载
                 try {
-                    const response = await fetch('http://localhost:11434/api/tags');
-                    if (response.ok) {
-                        const data = await response.json();
-                        const ollamaModels = data.models || [];
-                        ollamaModels.forEach(model => {
-                            modelSelect.innerHTML += `
-                                <option value="${model.name}" 
-                                    data-type="chat"
-                                    data-context-length="16000"
-                                    >${model.name}</option>`;
-                        });
+                    const response = await fetch(`/get_model_configs?provider=${providerId}`);
+                    const data = await response.json();
+                    if (data.status === 'success' && data.models && data.models[providerId]) {
+                        models = data.models[providerId];
                     }
-                } catch (error) {
-                    console.error('获取Ollama模型列表失败:', error);
-                    // 获取失败不会影响页面显示当前模型
+                } catch (e) {
+                    console.error('获取模型列表失败:', e);
                 }
-            } else if (modelConfigs && modelConfigs.models) {
-                // 其他提供商使用配置文件中的模型列表
-                const providerModels = modelConfigs.models[providerId] || [];
-                providerModels.forEach(model => {
-                    if (model.status === 'active') {
-                        // 添加推荐标记
-                        const isRecommended = model.name.toLowerCase().includes('推荐') || 
-                                             model.id.includes('v3') || // V3模型通常更新
-                                             model.name.includes('V3');
-                        const recommendedMark = isRecommended ? '(推荐)' : '';
-                        const displayName = model.name.includes('推荐') ? model.name : model.name + recommendedMark;
-                        
+            }
+            
+            // 添加模型选项
+            if (models.length) {
+                models.forEach(model => {
+                    // 检查是否已存在该选项
+                    if (!modelSelect.querySelector(`option[value="${model.id}"]`)) {
                         modelSelect.innerHTML += `
                             <option value="${model.id}" 
-                                data-type="${model.type}"
-                                data-context-length="${model.context_length}"
-                                data-recommended="${isRecommended}"
-                                >${displayName}</option>`;
+                                ${model.recommended ? 'data-recommended="true"' : ''}
+                                ${model.context_length ? 'data-context="' + model.context_length + '"' : ''}>
+                                ${model.name} ${model.recommended ? '(推荐)' : ''}
+                            </option>`;
                     }
                 });
             }
         } catch (error) {
-            console.error('更新模型选择框失败:', error);
-            // 错误处理：即使出错，也能显示当前模型
-        }
-
-        // 无论是否成功获取模型列表，都尝试设置当前值
-        if (currentModel) {
-            // 首先检查当前模型是否在列表中
-            const modelExists = Array.from(modelSelect.options).some(opt => opt.value === currentModel);
+            console.error('更新模型选项失败:', error);
+        } finally {
+            // 检查当前值是否存在于模型列表中
+            const modelExists = Array.from(modelSelect.options).some(opt => opt.value === currentModelValue);
             
             if (modelExists) {
-                modelSelect.value = currentModel;
-                // 确保自定义输入框隐藏，因为已选择预设模型
-                document.getElementById('customModelInput').style.display = 'none';
-            } else if (providerId === 'custom') {
-                // 只有在自定义提供商模式下才显示自定义模型输入框
+                // 如果当前值是预设模型之一
+                modelSelect.value = currentModelValue;
+                customModelInput.style.display = 'none';
+            } else if (currentModelValue) {
+                // 如果当前值不在预设列表中且不为空，视为自定义模型
+                // 添加自定义选项到下拉列表
+                modelSelect.innerHTML += '<option value="custom">自定义模型</option>';
                 modelSelect.value = 'custom';
-                const customModelInput = document.getElementById('customModelInput');
+                
+                // 显示自定义输入框并设置值
                 customModelInput.style.display = 'block';
-                customModelInput.querySelector('input').value = currentModel;
-            } else {
-                // 对于预设提供商，如果模型不存在，自动选择推荐模型或第一个可用模型
-                if (modelSelect.options.length > 1) {
-                    // 首先尝试找到推荐模型
-                    const recommendedOption = Array.from(modelSelect.options).find(opt => 
-                        opt.textContent.includes('推荐') || 
-                        opt.getAttribute('data-recommended') === 'true'
-                    );
-                    
-                    if (recommendedOption) {
-                        modelSelect.value = recommendedOption.value;
-                    } else {
-                        // 如果没有推荐模型，选择第一个有效选项
-                        modelSelect.selectedIndex = 1;
-                    }
-                    
-                    // 更新隐藏的值
-                    const selectedModel = modelSelect.value;
-                    document.getElementById('MODEL').value = selectedModel;
+                customModelInput.querySelector('input').value = currentModelValue;
+                
+                // 确保隐藏输入框的值是自定义的值
+                modelInput.value = currentModelValue;
+            } else if (modelSelect.options.length > 1) {
+                // 如果没有当前模型值，自动选择推荐模型或第一个选项
+                const recommendedOption = Array.from(modelSelect.options).find(opt => 
+                    opt.textContent.includes('推荐') || 
+                    opt.getAttribute('data-recommended') === 'true'
+                );
+                
+                if (recommendedOption) {
+                    modelSelect.value = recommendedOption.value;
+                } else {
+                    // 如果没有推荐模型，选择第一个有效选项
+                    modelSelect.selectedIndex = 1;
                 }
+                
+                // 更新隐藏的值
+                const selectedModel = modelSelect.value;
+                modelInput.value = selectedModel;
                 // 确保自定义输入框隐藏
-                document.getElementById('customModelInput').style.display = 'none';
+                customModelInput.style.display = 'none';
             }
-        } else if (modelSelect.options.length > 1) {
-            // 如果没有当前模型值，自动选择推荐模型或第一个选项
-            const recommendedOption = Array.from(modelSelect.options).find(opt => 
-                opt.textContent.includes('推荐') || 
-                opt.getAttribute('data-recommended') === 'true'
-            );
-            
-            if (recommendedOption) {
-                modelSelect.value = recommendedOption.value;
-            } else {
-                // 如果没有推荐模型，选择第一个有效选项
-                modelSelect.selectedIndex = 1;
-            }
-            
-            // 更新隐藏的值
-            const selectedModel = modelSelect.value;
-            document.getElementById('MODEL').value = selectedModel;
-            // 确保自定义输入框隐藏
-            document.getElementById('customModelInput').style.display = 'none';
         }
     }
 
@@ -1031,36 +1002,23 @@
         const customModelInput = document.getElementById('customModelInput');
         const apiSelect = document.getElementById('api_provider_select');
         
-        // 只在自定义API提供商模式下才允许自定义模型
-        if (value === 'custom' && apiSelect.value === 'custom') {
-            customModelInput.style.display = 'block';
-        } else {
-            customModelInput.style.display = 'none';
-            modelInput.value = value;
-        }
-    }
-
-    // 更新自定义API
-    function updateCustomApi(value) {
-        document.getElementById('DEEPSEEK_BASE_URL').value = value;
-    }
-
-    // 更新模型
-    function updateModel(value) {
-        const modelInput = document.getElementById('MODEL');
-        const customModelInput = document.getElementById('customModelInput');
-        
         if (value === 'custom') {
             customModelInput.style.display = 'block';
+            customModelInput.querySelector('input').focus();
         } else {
             customModelInput.style.display = 'none';
-            modelInput.value = value;
+            if (value) {
+                modelInput.value = value;
+            }
         }
     }
 
     // 更新自定义模型
     function updateCustomModel(value) {
-        document.getElementById('MODEL').value = value;
+        const modelInput = document.getElementById('MODEL');
+        if (value) {
+            modelInput.value = value;
+        }
     }
 
     // 页面加载时获取配置
@@ -1106,7 +1064,7 @@
 {% elif key == 'VISION_BASE_URL' %}
     <div class="mb-3">
         <select class="form-select mb-2" id="vision_api_provider_select" onchange="updateVisionApiProvider(this.value)" aria-label="选择图像识别API提供商">
-            <option value="">请选择服务提供商</option>
+            <!-- 移除请选择服务提供商选项 -->
             <!-- 预设常用选项，减少依赖异步加载 -->
             <option value="kourichat-global" data-url="https://api.ciallo.ac.cn/v1" data-register="https://api.ciallo.ac.cn/v1">KouriChat API (全球优化)</option>
             <option value="kourichat-asia" data-url="https://api.kourichat.com/v1" data-register="https://api.kourichat.com/v1">KouriChat API (亚太备线)</option>
@@ -1228,6 +1186,7 @@
         // 根据当前配置设置初始值
         const currentUrl = document.getElementById('VISION_BASE_URL').value;
         const apiSelect = document.getElementById('vision_api_provider_select');
+        const currentModel = document.getElementById('VISION_MODEL').value;
         
         // 查找匹配的选项
         let found = false;
@@ -1245,7 +1204,32 @@
         if (!found && currentUrl) {
             apiSelect.value = 'custom';
             showCustomVisionApiInput(currentUrl);
+            
+            // 对于自定义API提供商，显示自定义模型输入框并设置值
+            const customModelInput = document.getElementById('customVisionModelInput');
+            if (customModelInput && currentModel) {
+                customModelInput.style.display = 'block';
+                customModelInput.querySelector('input').value = currentModel;
+                
+                // 设置模型选择框
+                const modelSelect = document.getElementById('vision_model_select');
+                if (modelSelect) {
+                    // 添加自定义选项
+                    if (!modelSelect.querySelector('option[value="custom"]')) {
+                        modelSelect.innerHTML += '<option value="custom">自定义模型</option>';
+                    }
+                    modelSelect.value = 'custom';
+                }
+            }
+            
             updateVisionModelSelect('custom');
+        }
+        
+        // 如果自定义模型输入框需要显示
+        const customModelInput = document.getElementById('customVisionModelInput');
+        if (apiSelect.value === 'custom' && customModelInput && currentModel) {
+            customModelInput.style.display = 'block';
+            customModelInput.querySelector('input').value = currentModel;
         }
     }
 
@@ -1338,7 +1322,7 @@
 {% elif key == 'VISION_MODEL' %}
     <div class="mb-3">
         <select class="form-select mb-2" id="vision_model_select" onchange="updateVisionModel(this.value)" aria-label="选择图像识别模型">
-            <option value="">请选择模型</option>
+            <!-- 移除请选择模型选项 -->
         </select>
 
         <!-- 添加自定义模型输入框 -->
@@ -1362,8 +1346,11 @@
         const modelInput = document.getElementById('VISION_MODEL');
         const customModelInput = document.getElementById('customVisionModelInput');
         
-        // 重置选择框
-        modelSelect.innerHTML = '<option value="">请选择模型</option>';
+        // 保存当前模型值，确保后续操作不会丢失
+        const currentModelValue = modelInput.value;
+        
+        // 重置选择框 - 移除"请选择模型"选项
+        modelSelect.innerHTML = '';
         customModelInput.style.display = 'none';
         
         // 预设一些常用模型选项，确保始终有这些选项
@@ -1388,7 +1375,13 @@
         if (providerId === 'custom' || !providerId) {
             modelSelect.disabled = true;
             if (providerId === 'custom') {
+                // 添加自定义选项
+                modelSelect.innerHTML += '<option value="custom">自定义模型</option>';
+                modelSelect.value = 'custom';
+                
+                // 显示自定义输入框并设置当前值
                 customModelInput.style.display = 'block';
+                customModelInput.querySelector('input').value = currentModelValue;
             }
             return;
         }
@@ -1409,40 +1402,25 @@
             modelSelect.innerHTML += `<option value="${model.id}">${model.name}</option>`;
         });
         
-        // 仅在自定义提供商模式下添加自定义模型选项
-        if (providerId === 'custom') {
-            modelSelect.innerHTML += '<option value="custom">自定义模型</option>';
-        }
-        
-        // 设置当前选中的模型
-        const currentModel = modelInput.value;
-        const modelExists = models.some(m => m.id === currentModel);
+        // 检查当前值是否存在于模型列表中
+        const modelExists = models.some(m => m.id === currentModelValue);
         
         if (modelExists) {
-            modelSelect.value = currentModel;
-            // 确保自定义输入框隐藏
+            // 如果当前值是预设模型之一
+            modelSelect.value = currentModelValue;
             customModelInput.style.display = 'none';
-        } else if (currentModel && providerId === 'custom') {
-            // 只有在自定义提供商模式下才显示自定义模型输入框
+        } else if (currentModelValue) {
+            // 如果当前值不在预设列表中且不为空，视为自定义模型
+            // 添加自定义选项到下拉列表
+            modelSelect.innerHTML += '<option value="custom">自定义模型</option>';
             modelSelect.value = 'custom';
+            
+            // 显示自定义输入框并设置值
             customModelInput.style.display = 'block';
-            customModelInput.querySelector('input').value = currentModel;
-        } else if (currentModel) {
-            // 对于预设提供商，如果模型不存在，选择第一个可用模型
-            if (models.length > 0) {
-                // 默认选择第一个推荐模型
-                const recommendedModel = models.find(m => m.name.includes('推荐'));
-                if (recommendedModel) {
-                    modelSelect.value = recommendedModel.id;
-                    modelInput.value = recommendedModel.id;
-                } else {
-                    // 没有推荐模型，选择第一个
-                    modelSelect.value = models[0].id;
-                    modelInput.value = models[0].id;
-                }
-            }
-            // 确保自定义输入框隐藏
-            customModelInput.style.display = 'none';
+            customModelInput.querySelector('input').value = currentModelValue;
+            
+            // 确保隐藏输入框的值是自定义的值
+            modelInput.value = currentModelValue;
         } else if (models.length > 0) {
             // 默认选择第一个推荐模型
             const recommendedModel = models.find(m => m.name.includes('推荐'));
@@ -1651,8 +1629,6 @@
                                 </div>
                             </div>
                         </div>
-                        
-                        <!-- 删除公告设置部分 -->
                         
                     </form>
                 </div>
@@ -2075,6 +2051,58 @@
                             }
                         }
                         
+                        // 特殊处理视觉模型
+                        if (configKey === 'VISION_MODEL') {
+                            const apiSelect = document.getElementById('vision_api_provider_select');
+                            const customModelInput = document.getElementById('customVisionModelInput');
+                            const modelSelect = document.getElementById('vision_model_select');
+                            
+                            // 如果是自定义API提供商，确保自定义模型输入框显示值
+                            if (apiSelect && apiSelect.value === 'custom' && value) {
+                                // 显示自定义输入框并设置值
+                                if (customModelInput) {
+                                    customModelInput.style.display = 'block';
+                                    customModelInput.querySelector('input').value = value;
+                                }
+                                
+                                // 设置下拉框为自定义选项
+                                if (modelSelect) {
+                                    // 确保有自定义选项
+                                    if (!modelSelect.querySelector('option[value="custom"]')) {
+                                        modelSelect.innerHTML += '<option value="custom">自定义模型</option>';
+                                    }
+                                    modelSelect.value = 'custom';
+                                }
+                            }
+                            // 常规模型选项
+                            else if (modelSelect && value) {
+                                // 检查是否为预设模型
+                                let found = false;
+                                for (let i = 0; i < modelSelect.options.length; i++) {
+                                    if (modelSelect.options[i].value === value) {
+                                        modelSelect.value = value;
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                                
+                                // 如果不是预设模型，可能是自定义值
+                                if (!found && value) {
+                                    // 添加自定义选项
+                                    if (!modelSelect.querySelector('option[value="custom"]')) {
+                                        modelSelect.innerHTML += '<option value="custom">自定义模型</option>';
+                                    }
+                                    modelSelect.value = 'custom';
+                                    
+                                    // 显示自定义输入框
+                                    if (customModelInput) {
+                                        customModelInput.style.display = 'block';
+                                        customModelInput.querySelector('input').value = value;
+                                    }
+                                }
+                            }
+                        }
+                        
                         // 特殊处理用户列表
                         if (configKey === 'LISTEN_LIST' && Array.isArray(value)) {
                             const userListElement = document.getElementById(`selected_users_${configKey}`);
@@ -2153,16 +2181,64 @@
                         else if (configKey === 'VISION_MODEL') {
                             // 尝试更新模型选择器
                             const modelSelect = document.getElementById('vision_model_select');
+                            const customModelInput = document.getElementById('customVisionModelInput');
+                            const apiSelect = document.getElementById('vision_api_provider_select');
+                            
                             if (modelSelect && value) {
-                                modelSelect.value = value;
+                                // 检查是否为预设选项
+                                let option = modelSelect.querySelector(`option[value="${value}"]`);
+                                
+                                if (option) {
+                                    // 如果是预设选项，直接选择
+                                    modelSelect.value = value;
+                                } else {
+                                    // 如果不是预设选项，可能是自定义模型
+                                    // 确保有自定义选项
+                                    if (!modelSelect.querySelector('option[value="custom"]')) {
+                                        modelSelect.innerHTML += '<option value="custom">自定义模型</option>';
+                                    }
+                                    
+                                    // 设置为自定义选项
+                                    modelSelect.value = 'custom';
+                                    
+                                    // 显示自定义输入框
+                                    if (customModelInput) {
+                                        customModelInput.style.display = 'block';
+                                        customModelInput.querySelector('input').value = value;
+                                    }
+                                }
                             }
                         }
                         // 特殊处理LLM模型
                         else if (configKey === 'MODEL') {
                             // 尝试更新LLM模型选择器
                             const modelSelect = document.getElementById('model_select');
+                            const customModelInput = document.getElementById('customModelInput');
+                            const apiSelect = document.getElementById('api_provider_select');
+                            
                             if (modelSelect && value) {
-                                modelSelect.value = value;
+                                // 检查是否为预设选项
+                                let option = modelSelect.querySelector(`option[value="${value}"]`);
+                                
+                                if (option) {
+                                    // 如果是预设选项，直接选择
+                                    modelSelect.value = value;
+                                } else {
+                                    // 如果不是预设选项，可能是自定义模型
+                                    // 确保有自定义选项
+                                    if (!modelSelect.querySelector('option[value="custom"]')) {
+                                        modelSelect.innerHTML += '<option value="custom">自定义模型</option>';
+                                    }
+                                    
+                                    // 设置为自定义选项
+                                    modelSelect.value = 'custom';
+                                    
+                                    // 显示自定义输入框
+                                    if (customModelInput) {
+                                        customModelInput.style.display = 'block';
+                                        customModelInput.querySelector('input').value = value;
+                                    }
+                                }
                             }
                         }
                     }

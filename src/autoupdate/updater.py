@@ -15,7 +15,9 @@ import shutil
 import json
 import logging
 import datetime
-from typing import Optional, Dict, Any
+import fnmatch
+import hashlib
+from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
@@ -27,17 +29,44 @@ class Updater:
     REPO_BRANCH = "main"  # 假设使用main分支，如果有其他分支请相应调整
     GITHUB_API = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}"
     
-    # 需要跳过的文件和文件夹（不会被更新）
-    SKIP_FILES = [
-        "data", #data文件夹，本地数据储存
-        "data/database/chat_history.db",  # 聊天记录数据库
-        "data/images/temp",  # 临时图片目录
-        "data/voices",  # 语音文件目录
-        "logs",  # 日志目录
-        "screenshot",  # 截图目录
-        "wxauto文件",  # wxauto临时文件
-        ".env",  # 环境变量文件
-        "__pycache__",  # Python缓存文件
+    # 默认需要跳过的文件和文件夹（不会被更新）
+    DEFAULT_IGNORE_PATTERNS = [
+        # 用户数据目录
+        "data/**",
+        "**/data/database/**",
+        "**/data/images/**",
+        "**/data/voices/**",
+        "**/data/avatars/**",
+
+        # 日志和临时文件
+        "logs/**",
+        "tmp/**",
+        "screenshot/**",
+        "wxauto文件/**",
+        "__pycache__/**",
+        "**/*.pyc",
+        "**/*.pyo",
+        "**/*.pyd",
+        "**/*.so",
+        "**/*.dll",
+
+        # 配置和环境文件
+        ".env",
+        "**/*.env",
+        "src/config/config.json",
+
+        # 版本控制
+        ".git/**",
+        ".gitignore",
+        ".gitattributes",
+
+        # 更新相关临时目录
+        "temp_update/**",
+        "backup/**",
+
+        # 其他不需要更新的目录
+        ".venv/**",
+        "venv/**"
     ]
 
     # GitHub代理列表
@@ -55,6 +84,37 @@ class Updater:
         self.temp_dir = os.path.join(self.root_dir, 'temp_update')
         self.version_file = os.path.join(self.root_dir, 'version.json')
         self.current_proxy_index = 0  # 当前使用的代理索引
+        self.ignore_patterns = self._load_ignore_patterns()  # 加载忽略模式
+
+    def _load_ignore_patterns(self) -> List[str]:
+        """加载忽略模式，优先使用.updateignore文件，如果存在的话"""
+        # 首先使用内置的默认规则
+        patterns = self.DEFAULT_IGNORE_PATTERNS.copy()
+        
+        # 如果存在.updateignore文件，读取其中的模式（可选步骤）
+        ignore_file = os.path.join(self.root_dir, '.updateignore')
+        if os.path.exists(ignore_file):
+            try:
+                with open(ignore_file, 'r', encoding='utf-8') as f:
+                    file_patterns = []
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#'):
+                            file_patterns.append(line)
+                    
+                    if file_patterns:
+                        # 如果文件中有规则，则替换默认规则
+                        patterns = file_patterns
+                        logger.info(f"使用.updateignore文件中的规则，共{len(patterns)}条")
+                    else:
+                        logger.info("发现.updateignore文件但没有有效规则，使用默认规则")
+            except Exception as e:
+                logger.error(f"读取.updateignore文件失败: {str(e)}")
+                logger.info("使用默认忽略规则")
+        else:
+            logger.info("使用内置默认忽略规则")
+        
+        return patterns
 
     def get_proxy_url(self, original_url: str) -> str:
         """获取当前代理URL"""
@@ -230,8 +290,34 @@ class Updater:
                     return False
 
     def should_skip_file(self, file_path: str) -> bool:
-        """检查是否应该跳过更新某个文件"""
-        return any(skip_file in file_path for skip_file in self.SKIP_FILES)
+        """检查是否应该跳过更新某个文件
+        file_path: 文件的相对路径（相对于仓库根目录）
+        """
+        # 规范化路径，使用正斜杠
+        file_path = file_path.replace('\\', '/')
+        
+        # 使用fnmatch检查是否匹配任何忽略模式
+        for pattern in self.ignore_patterns:
+            if fnmatch.fnmatch(file_path, pattern):
+                logger.debug(f"跳过文件: {file_path} (匹配模式: {pattern})")
+                return True
+                
+        return False
+    
+    def calculate_file_hash(self, file_path: str) -> str:
+        """计算文件的MD5哈希值"""
+        if not os.path.exists(file_path):
+            return ""
+            
+        hash_md5 = hashlib.md5()
+        try:
+            with open(file_path, "rb") as f:
+                for chunk in iter(lambda: f.read(4096), b""):
+                    hash_md5.update(chunk)
+            return hash_md5.hexdigest()
+        except Exception as e:
+            logger.error(f"计算文件哈希值失败: {file_path} - {str(e)}")
+            return ""
 
     def backup_current_version(self) -> bool:
         """备份当前版本"""
@@ -239,7 +325,30 @@ class Updater:
             backup_dir = os.path.join(self.root_dir, 'backup')
             if os.path.exists(backup_dir):
                 shutil.rmtree(backup_dir)
-            shutil.copytree(self.root_dir, backup_dir, ignore=shutil.ignore_patterns(*self.SKIP_FILES))
+                
+            # 创建备份目录
+            os.makedirs(backup_dir, exist_ok=True)
+            
+            # 复制所有不应该被忽略的文件
+            for root, dirs, files in os.walk(self.root_dir):
+                # 跳过backup和temp_update目录
+                if 'backup' in root or 'temp_update' in root:
+                    continue
+                    
+                # 获取相对路径
+                rel_path = os.path.relpath(root, self.root_dir)
+                if rel_path == '.':
+                    rel_path = ''
+                
+                # 处理文件
+                for file in files:
+                    file_rel_path = os.path.join(rel_path, file).replace('\\', '/')
+                    if not self.should_skip_file(file_rel_path):
+                        src_file = os.path.join(root, file)
+                        dst_file = os.path.join(backup_dir, file_rel_path)
+                        os.makedirs(os.path.dirname(dst_file), exist_ok=True)
+                        shutil.copy2(src_file, dst_file)
+            
             return True
         except Exception as e:
             logger.error(f"备份失败: {str(e)}")
@@ -252,17 +361,23 @@ class Updater:
             if not os.path.exists(backup_dir):
                 logger.error("备份目录不存在")
                 return False
-                
+            
+            # 恢复所有备份的文件
             for root, dirs, files in os.walk(backup_dir):
-                relative_path = os.path.relpath(root, backup_dir)
-                target_dir = os.path.join(self.root_dir, relative_path)
+                # 获取相对路径
+                rel_path = os.path.relpath(root, backup_dir)
+                if rel_path == '.':
+                    rel_path = ''
                 
+                # 处理文件
                 for file in files:
-                    if not self.should_skip_file(file):
+                    file_rel_path = os.path.join(rel_path, file).replace('\\', '/')
+                    if not self.should_skip_file(file_rel_path):
                         src_file = os.path.join(root, file)
-                        dst_file = os.path.join(target_dir, file)
+                        dst_file = os.path.join(self.root_dir, file_rel_path)
                         os.makedirs(os.path.dirname(dst_file), exist_ok=True)
                         shutil.copy2(src_file, dst_file)
+            
             return True
         except Exception as e:
             logger.error(f"恢复失败: {str(e)}")
@@ -275,20 +390,78 @@ class Updater:
             zip_path = os.path.join(self.temp_dir, 'update.zip')
             extract_dir = os.path.join(self.temp_dir, 'extracted')
             
+            if os.path.exists(extract_dir):
+                shutil.rmtree(extract_dir)
+            os.makedirs(extract_dir, exist_ok=True)
+            
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(extract_dir)
             
+            # 找到解压后的实际项目根目录（通常是一个子目录）
+            extracted_root = None
+            for item in os.listdir(extract_dir):
+                item_path = os.path.join(extract_dir, item)
+                if os.path.isdir(item_path):
+                    extracted_root = item_path
+                    break
+            
+            if not extracted_root:
+                raise Exception("无法找到解压后的项目目录")
+            
+            # 记录更新的文件
+            updated_files = []
+            
             # 复制新文件
-            for root, dirs, files in os.walk(extract_dir):
-                relative_path = os.path.relpath(root, extract_dir)
-                target_dir = os.path.join(self.root_dir, relative_path)
+            for root, dirs, files in os.walk(extracted_root):
+                # 获取相对路径
+                rel_path = os.path.relpath(root, extracted_root)
+                if rel_path == '.':
+                    rel_path = ''
                 
+                # 处理目录 - 跳过应该忽略的目录
+                dirs_to_remove = []
+                for dir_name in dirs:
+                    dir_rel_path = os.path.join(rel_path, dir_name).replace('\\', '/')
+                    if self.should_skip_file(dir_rel_path):
+                        dirs_to_remove.append(dir_name)
+                
+                # 从将被处理的目录列表中移除需要忽略的目录
+                for dir_name in dirs_to_remove:
+                    dirs.remove(dir_name)
+                
+                # 处理文件
                 for file in files:
-                    if not self.should_skip_file(file):
-                        src_file = os.path.join(root, file)
-                        dst_file = os.path.join(target_dir, file)
+                    file_rel_path = os.path.join(rel_path, file).replace('\\', '/')
+                    
+                    # 判断是否应该忽略这个文件
+                    if self.should_skip_file(file_rel_path):
+                        continue
+                    
+                    # 源文件和目标文件路径
+                    src_file = os.path.join(root, file)
+                    dst_file = os.path.join(self.root_dir, file_rel_path)
+                    
+                    # 检查文件是否有变化
+                    need_update = True
+                    if os.path.exists(dst_file):
+                        src_hash = self.calculate_file_hash(src_file)
+                        dst_hash = self.calculate_file_hash(dst_file)
+                        if src_hash and dst_hash and src_hash == dst_hash:
+                            need_update = False
+                    
+                    # 如果文件有变化或不存在，则更新
+                    if need_update:
                         os.makedirs(os.path.dirname(dst_file), exist_ok=True)
                         shutil.copy2(src_file, dst_file)
+                        updated_files.append(file_rel_path)
+            
+            # 记录更新的文件列表
+            if updated_files:
+                logger.info(f"更新了 {len(updated_files)} 个文件")
+                logger.debug("更新的文件列表: " + ", ".join(updated_files[:10]) + 
+                           ("..." if len(updated_files) > 10 else ""))
+            else:
+                logger.info("未发现需要更新的文件")
             
             return True
         except Exception as e:

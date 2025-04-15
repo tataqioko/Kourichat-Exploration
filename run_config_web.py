@@ -88,6 +88,9 @@ init()
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(ROOT_DIR)
 
+# 定义配置文件路径
+config_path = os.path.join(ROOT_DIR, 'src/config/config.json')  # 将配置路径定义为全局常量
+
 # 禁用Python的字节码缓存
 sys.dont_write_bytecode = True
 
@@ -311,6 +314,40 @@ def index():
     """重定向到控制台"""
     return redirect(url_for('dashboard'))
 
+def load_config_file():
+    """从配置文件加载配置数据"""
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"加载配置失败: {str(e)}")
+        return {"categories": {}}
+
+def save_config_file(config_data):
+    """保存配置数据到配置文件"""
+    try:
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config_data, f, ensure_ascii=False, indent=4)
+        return True
+    except Exception as e:
+        logger.error(f"保存配置失败: {str(e)}")
+        return False
+
+def reinitialize_tasks():
+    """重新初始化定时任务"""
+    try:
+        from src.main import initialize_auto_tasks, message_handler
+        auto_tasker = initialize_auto_tasks(message_handler)
+        if auto_tasker:
+            logger.info("成功重新初始化定时任务")
+            return True
+        else:
+            logger.warning("重新初始化定时任务返回空值")
+            return False
+    except Exception as e:
+        logger.error(f"重新初始化定时任务失败: {str(e)}")
+        return False
+
 @app.route('/save', methods=['POST'])
 def save_config():
     """保存配置"""
@@ -333,9 +370,7 @@ def save_config():
             }), 400
 
         # 读取当前配置
-        config_path = os.path.join(ROOT_DIR, 'src/config/config.json')
-        with open(config_path, 'r', encoding='utf-8') as f:
-            current_config = json.load(f)
+        current_config = load_config_file()
 
         # 处理配置更新
         for key, value in config_data.items():
@@ -381,22 +416,18 @@ def save_config():
                 logger.warning(f"未知的配置项: {key}")
 
         # 保存配置
-        with open(config_path, 'w', encoding='utf-8') as f:
-            json.dump(current_config, f, ensure_ascii=False, indent=4)
+        if not save_config_file(current_config):
+            return jsonify({
+                "status": "error",
+                "message": "保存配置文件失败",
+                "title": "错误"
+            }), 500
         
         # 立即重新加载配置
         g.config_data = current_config
         
         # 重新初始化定时任务
-        try:
-            from src.main import initialize_auto_tasks, message_handler
-            auto_tasker = initialize_auto_tasks(message_handler)
-            if auto_tasker:
-                logger.info("成功重新初始化定时任务")
-            else:
-                logger.warning("重新初始化定时任务返回空值")
-        except Exception as e:
-            logger.error(f"重新初始化定时任务失败: {str(e)}")
+        reinitialize_tasks()
         
         return jsonify({
             "status": "success",
@@ -552,9 +583,7 @@ def get_background():
 def load_config():
     """在每次请求之前加载配置"""
     try:
-        config_path = os.path.join(ROOT_DIR, 'src/config/config.json')
-        with open(config_path, 'r', encoding='utf-8') as f:
-            g.config_data = json.load(f)  # 使用 g 来存储配置数据
+        g.config_data = load_config_file()
     except Exception as e:
         logger.error(f"加载配置失败: {str(e)}")
 
@@ -693,20 +722,16 @@ def confirm_update():
             'console_output': f'更新失败: {str(e)}'
         })
 
-@app.route('/start_bot')
-def start_bot():
-    """启动机器人"""
+def start_bot_process():
+    """启动机器人进程，返回(成功状态, 消息)"""
     global bot_process, bot_start_time, job_object
+    
     try:
         if bot_process and bot_process.poll() is None:
-            return jsonify({
-                'status': 'error',
-                'message': '机器人已在运行中'
-            })
+            return False, "机器人已在运行中"
         
         # 清空之前的日志
-        while not bot_logs.empty():
-            bot_logs.get()
+        clear_bot_logs()
         
         # 设置环境变量
         env = os.environ.copy()
@@ -748,39 +773,64 @@ def start_bot():
         bot_start_time = datetime.datetime.now()
         
         # 启动日志读取线程
-        def read_output():
-            try:
-                while bot_process and bot_process.poll() is None:
-                    if bot_process.stdout:
-                        line = bot_process.stdout.readline()
-                        if line:
-                            try:
-                                # 尝试解码并清理日志内容
-                                line = line.strip()
-                                if isinstance(line, bytes):
-                                    line = line.decode('utf-8', errors='replace')
-                                timestamp = datetime.datetime.now().strftime('%H:%M:%S')
-                                bot_logs.put(f"[{timestamp}] {line}")
-                            except Exception as e:
-                                logger.error(f"日志处理错误: {str(e)}")
-                                continue
-            except Exception as e:
-                logger.error(f"读取日志失败: {str(e)}")
-                bot_logs.put(f"[ERROR] 读取日志失败: {str(e)}")
+        start_log_reading_thread()
         
-        thread = threading.Thread(target=read_output, daemon=True)
-        thread.start()
-        
-        return jsonify({
-            'status': 'success',
-            'message': '机器人启动成功'
-        })
+        return True, "机器人启动成功"
     except Exception as e:
         logger.error(f"启动机器人失败: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        })
+        return False, str(e)
+
+def start_log_reading_thread():
+    """启动日志读取线程"""
+    def read_output():
+        try:
+            while bot_process and bot_process.poll() is None:
+                if bot_process.stdout:
+                    line = bot_process.stdout.readline()
+                    if line:
+                        try:
+                            # 尝试解码并清理日志内容
+                            line = line.strip()
+                            if isinstance(line, bytes):
+                                line = line.decode('utf-8', errors='replace')
+                            timestamp = datetime.datetime.now().strftime('%H:%M:%S')
+                            bot_logs.put(f"[{timestamp}] {line}")
+                        except Exception as e:
+                            logger.error(f"日志处理错误: {str(e)}")
+                            continue
+        except Exception as e:
+            logger.error(f"读取日志失败: {str(e)}")
+            bot_logs.put(f"[ERROR] 读取日志失败: {str(e)}")
+    
+    thread = threading.Thread(target=read_output, daemon=True)
+    thread.start()
+
+def get_bot_uptime():
+    """获取机器人运行时间"""
+    if not bot_start_time or not bot_process or bot_process.poll() is not None:
+        return "0分钟"
+    
+    delta = datetime.datetime.now() - bot_start_time
+    total_seconds = int(delta.total_seconds())
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+    seconds = total_seconds % 60
+    
+    if hours > 0:
+        return f"{hours}小时{minutes}分钟{seconds}秒"
+    elif minutes > 0:
+        return f"{minutes}分钟{seconds}秒"
+    else:
+        return f"{seconds}秒"
+
+@app.route('/start_bot')
+def start_bot():
+    """启动机器人"""
+    success, message = start_bot_process()
+    return jsonify({
+        'status': 'success' if success else 'error',
+        'message': message
+    })
 
 @app.route('/get_bot_logs')
 def get_bot_logs():
@@ -789,84 +839,76 @@ def get_bot_logs():
     while not bot_logs.empty():
         logs.append(bot_logs.get())
     
-    # 获取运行时间
-    uptime = '0分钟'
-    if bot_start_time and bot_process and bot_process.poll() is None:
-        delta = datetime.datetime.now() - bot_start_time
-        total_seconds = int(delta.total_seconds())
-        hours = total_seconds // 3600
-        minutes = (total_seconds % 3600) // 60
-        seconds = total_seconds % 60
-        
-        if hours > 0:
-            uptime = f"{hours}小时{minutes}分钟{seconds}秒"
-        elif minutes > 0:
-            uptime = f"{minutes}分钟{seconds}秒"
-        else:
-            uptime = f"{seconds}秒"
-    
     return jsonify({
         'status': 'success',
         'logs': logs,
-        'uptime': uptime,
+        'uptime': get_bot_uptime(),
         'is_running': bot_process is not None and bot_process.poll() is None
     })
+
+def terminate_bot_process(force=False):
+    """终止机器人进程的通用函数"""
+    global bot_process, bot_start_time
+    
+    if not bot_process or bot_process.poll() is not None:
+        return False, "机器人未在运行"
+        
+    try:
+        # 首先尝试正常终止进程
+        bot_process.terminate()
+        
+        # 等待进程结束
+        try:
+            bot_process.wait(timeout=5)  # 等待最多5秒
+        except subprocess.TimeoutExpired:
+            # 如果超时或需要强制终止，强制结束进程
+            if force:
+                bot_process.kill()
+                bot_process.wait()
+        
+        # 确保所有子进程都被终止
+        if sys.platform.startswith('win'):
+            subprocess.run(['taskkill', '/F', '/T', '/PID', str(bot_process.pid)], 
+                         capture_output=True)
+        else:
+            # 使用 getattr 避免在 Windows 上直接引用不存在的属性
+            killpg = getattr(os, 'killpg', None)
+            getpgid = getattr(os, 'getpgid', None)
+            if killpg and getpgid:
+                import signal
+                killpg(getpgid(bot_process.pid), signal.SIGTERM)
+            else:
+                bot_process.kill()
+        
+        # 清理进程对象
+        bot_process = None
+        bot_start_time = None
+        
+        # 添加日志记录
+        timestamp = datetime.datetime.now().strftime('%H:%M:%S')
+        bot_logs.put(f"[{timestamp}] 正在关闭监听线程...")
+        bot_logs.put(f"[{timestamp}] 正在关闭系统...")
+        bot_logs.put(f"[{timestamp}] 系统已退出")
+        
+        return True, "机器人已停止"
+            
+    except Exception as e:
+        logger.error(f"停止机器人失败: {str(e)}")
+        return False, f"停止失败: {str(e)}"
+
+def clear_bot_logs():
+    """清空机器人日志队列"""
+    while not bot_logs.empty():
+        bot_logs.get()
 
 @app.route('/stop_bot')
 def stop_bot():
     """停止机器人"""
-    global bot_process
-    try:
-        if bot_process:
-            # 首先尝试正常终止进程
-            bot_process.terminate()
-            
-            # 等待进程结束
-            try:
-                bot_process.wait(timeout=5)  # 等待最多5秒
-            except subprocess.TimeoutExpired:
-                # 如果超时，强制结束进程
-                bot_process.kill()
-                bot_process.wait()
-            
-            # 确保所有子进程都被终止
-            if sys.platform.startswith('win'):
-                subprocess.run(['taskkill', '/F', '/T', '/PID', str(bot_process.pid)], 
-                             capture_output=True)
-            else:
-                # 使用 getattr 避免在 Windows 上直接引用不存在的属性
-                killpg = getattr(os, 'killpg', None)
-                getpgid = getattr(os, 'getpgid', None)
-                if killpg and getpgid:
-                    import signal
-                    killpg(getpgid(bot_process.pid), signal.SIGTERM)
-                else:
-                    bot_process.kill()
-            
-            # 清理进程对象
-            bot_process = None
-            
-            # 添加日志记录
-            timestamp = datetime.datetime.now().strftime('%H:%M:%S')
-            bot_logs.put(f"[{timestamp}] 正在关闭监听线程...")
-            bot_logs.put(f"[{timestamp}] 正在关闭系统...")
-            bot_logs.put(f"[{timestamp}] 系统已退出")
-            
-            return jsonify({
-                'status': 'success',
-                'message': '机器人已停止'
-            })
-            
-        return jsonify({
-            'status': 'error',
-            'message': '机器人未在运行'
-        })
-    except Exception as e:
-        logger.error(f"停止机器人失败: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        })
+    success, message = terminate_bot_process(force=True)
+    return jsonify({
+        'status': 'success' if success else 'error',
+        'message': message
+    })
 
 @app.route('/config')
 def config():
@@ -912,7 +954,6 @@ def execute_command():
     """执行控制台命令"""
     try:
         command = (request.json or {}).get('command', '').strip()
-        global bot_process, bot_start_time
         
         # 处理内置命令
         if command.lower() == 'help':
@@ -938,8 +979,7 @@ type - 显示文件内容
             
         elif command.lower() == 'clear':
             # 清空日志队列
-            while not bot_logs.empty():
-                bot_logs.get()
+            clear_bot_logs()
             return jsonify({
                 'status': 'success',
                 'output': '',  # 返回空输出，让前端清空日志
@@ -948,22 +988,9 @@ type - 显示文件内容
             
         elif command.lower() == 'status':
             if bot_process and bot_process.poll() is None:
-                uptime = '0分钟'
-                if bot_start_time:
-                    delta = datetime.datetime.now() - bot_start_time
-                    total_seconds = int(delta.total_seconds())
-                    hours = total_seconds // 3600
-                    minutes = (total_seconds % 3600) // 60
-                    seconds = total_seconds % 60
-                    if hours > 0:
-                        uptime = f"{hours}小时{minutes}分钟{seconds}秒"
-                    elif minutes > 0:
-                        uptime = f"{minutes}分钟{seconds}秒"
-                    else:
-                        uptime = f"{seconds}秒"
                 return jsonify({
                     'status': 'success',
-                    'output': f'机器人状态: 运行中\n运行时间: {uptime}'
+                    'output': f'机器人状态: 运行中\n运行时间: {get_bot_uptime()}'
                 })
             else:
                 return jsonify({
@@ -985,169 +1012,42 @@ type - 显示文件内容
             })
             
         elif command.lower() == 'start':
-            if bot_process and bot_process.poll() is None:
-                return jsonify({
-                    'status': 'error',
-                    'error': '机器人已在运行中'
-                })
-            
-            # 清空之前的日志
-            while not bot_logs.empty():
-                bot_logs.get()
-            
-            # 设置环境变量
-            env = os.environ.copy()
-            env['PYTHONIOENCODING'] = 'utf-8'
-            
-            # 创建新的进程组
-            if sys.platform.startswith('win'):
-                CREATE_NEW_PROCESS_GROUP = 0x00000200
-                DETACHED_PROCESS = 0x00000008
-                creationflags = CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS
-                preexec_fn = None
-            else:
-                creationflags = 0
-                preexec_fn = getattr(os, 'setsid', None)
-            
-            # 启动进程
-            bot_process = subprocess.Popen(
-                [sys.executable, 'run.py'],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                env=env,
-                encoding='utf-8',
-                errors='replace',
-                creationflags=creationflags if sys.platform.startswith('win') else 0,
-                preexec_fn=preexec_fn
-            )
-            
-            # 记录启动时间
-            bot_start_time = datetime.datetime.now()
-            
+            success, message = start_bot_process()
             return jsonify({
-                'status': 'success',
-                'output': '机器人启动成功'
+                'status': 'success' if success else 'error',
+                'output' if success else 'error': message
             })
             
         elif command.lower() == 'stop':
-            if bot_process and bot_process.poll() is None:
-                try:
-                    # 首先尝试正常终止进程
-                    bot_process.terminate()
-                    
-                    # 等待进程结束
-                    try:
-                        bot_process.wait(timeout=5)  # 等待最多5秒
-                    except subprocess.TimeoutExpired:
-                        # 如果超时，强制结束进程
-                        bot_process.kill()
-                        bot_process.wait()
-                    
-                    # 确保所有子进程都被终止
-                    if sys.platform.startswith('win'):
-                        subprocess.run(['taskkill', '/F', '/T', '/PID', str(bot_process.pid)], 
-                                     capture_output=True)
-                    else:
-                        # 使用 getattr 避免在 Windows 上直接引用不存在的属性
-                        killpg = getattr(os, 'killpg', None)
-                        getpgid = getattr(os, 'getpgid', None)
-                        if killpg and getpgid:
-                            import signal
-                            killpg(getpgid(bot_process.pid), signal.SIGTERM)
-                        else:
-                            bot_process.kill()
-                    
-                    # 清理进程对象
-                    bot_process = None
-                    bot_start_time = None
-                    
-                    return jsonify({
-                        'status': 'success',
-                        'output': '机器人已停止'
-                    })
-                except Exception as e:
-                    return jsonify({
-                        'status': 'error',
-                        'error': f'停止失败: {str(e)}'
-                    })
-            else:
-                return jsonify({
-                    'status': 'error',
-                    'error': '机器人未在运行'
-                })
+            success, message = terminate_bot_process(force=True)
+            return jsonify({
+                'status': 'success' if success else 'error',
+                'output' if success else 'error': message
+            })
             
         elif command.lower() == 'restart':
             # 先停止
             if bot_process and bot_process.poll() is None:
-                try:
-                    bot_process.terminate()
-                    try:
-                        bot_process.wait(timeout=5)
-                    except subprocess.TimeoutExpired:
-                        bot_process.kill()
-                        bot_process.wait()
-                    
-                    if sys.platform.startswith('win'):
-                        subprocess.run(['taskkill', '/F', '/T', '/PID', str(bot_process.pid)], 
-                                     capture_output=True)
-                    else:
-                        # 使用 getattr 避免在 Windows 上直接引用不存在的属性
-                        killpg = getattr(os, 'killpg', None)
-                        getpgid = getattr(os, 'getpgid', None)
-                        if killpg and getpgid:
-                            import signal
-                            killpg(getpgid(bot_process.pid), signal.SIGTERM)
-                except Exception as e:
+                success, _ = terminate_bot_process(force=True)
+                if not success:
                     return jsonify({
                         'status': 'error',
-                        'error': f'重启失败: {str(e)}'
+                        'error': '重启失败: 无法停止当前进程'
                     })
             
             time.sleep(2)  # 等待进程完全停止
             
             # 然后重新启动
-            try:
-                # 清空日志
-                while not bot_logs.empty():
-                    bot_logs.get()
-                
-                env = os.environ.copy()
-                env['PYTHONIOENCODING'] = 'utf-8'
-                
-                if sys.platform.startswith('win'):
-                    CREATE_NEW_PROCESS_GROUP = 0x00000200
-                    DETACHED_PROCESS = 0x00000008
-                    creationflags = CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS
-                    preexec_fn = None
-                else:
-                    creationflags = 0
-                    preexec_fn = getattr(os, 'setsid', None)
-                
-                bot_process = subprocess.Popen(
-                    [sys.executable, 'run.py'],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    bufsize=1,
-                    env=env,
-                    encoding='utf-8',
-                    errors='replace',
-                    creationflags=creationflags if sys.platform.startswith('win') else 0,
-                    preexec_fn=preexec_fn
-                )
-                
-                bot_start_time = datetime.datetime.now()
-                
+            success, message = start_bot_process()
+            if success:
                 return jsonify({
                     'status': 'success',
                     'output': '机器人已重启'
                 })
-            except Exception as e:
+            else:
                 return jsonify({
                     'status': 'error',
-                    'error': f'重启失败: {str(e)}'
+                    'error': f'重启失败: {message}'
                 })
             
         # 执行CMD命令
@@ -1514,31 +1414,22 @@ def main():
     print("-"*50)
     print_status("配置管理系统已就绪！", "success", "STAR_1")
 
-    # 获取本机所有IP地址
-    def get_ip_addresses():
-        ip_list = []
-        try:
-            # 获取主机名
-            hostname = socket.gethostname()
-            # 获取本机IP地址列表
-            addresses = socket.getaddrinfo(hostname, None)
-            
-            for addr in addresses:
-                ip = addr[4][0]
-                # 只获取IPv4地址且不是回环地址
-                if isinstance(ip, str) and '.' in ip and ip != '127.0.0.1':
-                    ip_list.append(ip)
-        except:
-            pass
-        return ip_list
-
     # 显示所有可用的访问地址
-    ip_addresses = get_ip_addresses()
     print_status("可通过以下地址访问:", "info", "CHAIN")
     print(f"  Local:   http://localhost:{port}")
     print(f"  Local:   http://127.0.0.1:{port}")
-    for ip in ip_addresses:
-        print(f"  Network: http://{ip}:{port}")
+    
+    # 获取本地IP地址
+    hostname = socket.gethostname()
+    try:
+        addresses = socket.getaddrinfo(hostname, None)
+        for addr in addresses:
+            ip = addr[4][0]
+            if isinstance(ip, str) and '.' in ip and ip != '127.0.0.1':
+                print(f"  Network: http://{ip}:{port}")
+    except Exception as e:
+        logger.error(f"获取IP地址失败: {str(e)}")
+        
     print("="*50 + "\n")
     
     # 启动浏览器
@@ -1998,9 +1889,7 @@ def load_avatar_content():
 def get_tasks():
     """获取定时任务列表"""
     try:
-        config_path = os.path.join(ROOT_DIR, 'src/config/config.json')
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config_data = json.load(f)
+        config_data = load_config_file()
         
         tasks = []
         if 'categories' in config_data and 'schedule_settings' in config_data['categories']:
@@ -2034,9 +1923,7 @@ def save_task():
                 })
         
         # 读取配置
-        config_path = os.path.join(ROOT_DIR, 'src/config/config.json')
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config_data = json.load(f)
+        config_data = load_config_file()
         
         # 确保必要的配置结构存在
         if 'categories' not in config_data:
@@ -2088,19 +1975,14 @@ def save_task():
         config_data['categories']['schedule_settings']['settings']['tasks']['value'] = tasks
         
         # 保存配置
-        with open(config_path, 'w', encoding='utf-8') as f:
-            json.dump(config_data, f, ensure_ascii=False, indent=4)
+        if not save_config_file(config_data):
+            return jsonify({
+                'status': 'error',
+                'message': '保存配置文件失败'
+            }), 500
         
         # 重新初始化定时任务
-        try:
-            from src.main import initialize_auto_tasks, message_handler
-            auto_tasker = initialize_auto_tasks(message_handler)
-            if auto_tasker:
-                logger.info("成功重新初始化定时任务")
-            else:
-                logger.warning("重新初始化定时任务返回空值")
-        except Exception as e:
-            logger.error(f"重新初始化定时任务失败: {str(e)}")
+        reinitialize_tasks()
         
         return jsonify({
             'status': 'success',
@@ -2127,9 +2009,7 @@ def delete_task():
             })
         
         # 读取配置
-        config_path = os.path.join(ROOT_DIR, 'src/config/config.json')
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config_data = json.load(f)
+        config_data = load_config_file()
         
         # 获取任务列表
         if 'categories' in config_data and 'schedule_settings' in config_data['categories']:
@@ -2143,19 +2023,14 @@ def delete_task():
                 config_data['categories']['schedule_settings']['settings']['tasks']['value'] = new_tasks
                 
                 # 保存配置
-                with open(config_path, 'w', encoding='utf-8') as f:
-                    json.dump(config_data, f, ensure_ascii=False, indent=4)
+                if not save_config_file(config_data):
+                    return jsonify({
+                        'status': 'error',
+                        'message': '保存配置文件失败'
+                    }), 500
                 
                 # 重新初始化定时任务
-                try:
-                    from src.main import initialize_auto_tasks, message_handler
-                    auto_tasker = initialize_auto_tasks(message_handler)
-                    if auto_tasker:
-                        logger.info("成功重新初始化定时任务")
-                    else:
-                        logger.warning("重新初始化定时任务返回空值")
-                except Exception as e:
-                    logger.error(f"重新初始化定时任务失败: {str(e)}")
+                reinitialize_tasks()
                 
                 return jsonify({
                     'status': 'success',
