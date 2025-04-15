@@ -31,8 +31,9 @@ class Updater:
     
     # 默认需要跳过的文件和文件夹（不会被更新）
     DEFAULT_IGNORE_PATTERNS = [
-        # 用户数据目录
+        # 用户数据目录，排除base.md
         "data/**",
+        "!data/base/base.md",  # 允许更新base.md文件
         "**/data/database/**",
         "**/data/images/**",
         "**/data/voices/**",
@@ -296,8 +297,14 @@ class Updater:
         # 规范化路径，使用正斜杠
         file_path = file_path.replace('\\', '/')
         
+        # 特殊处理 data/base/base.md
+        if file_path == "data/base/base.md":
+            return False
+            
         # 使用fnmatch检查是否匹配任何忽略模式
         for pattern in self.ignore_patterns:
+            if pattern.startswith('!'):  # 排除模式
+                continue
             if fnmatch.fnmatch(file_path, pattern):
                 logger.debug(f"跳过文件: {file_path} (匹配模式: {pattern})")
                 return True
