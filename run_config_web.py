@@ -2228,20 +2228,12 @@ def get_vision_api_configs():
         # 构建图像识别API提供商列表
         vision_providers = [
             {
-                "id": "kourichat-global",
-                "name": "KouriChat API (全球优化)",
-                "url": "https://api.ciallo.ac.cn/v1",
-                "register_url": "https://api.ciallo.ac.cn/register",
-                "status": "active",
-                "priority": 1
-            },
-            {
                 "id": "kourichat-asia",
-                "name": "KouriChat API (亚太备线)",
+                "name": "KouriChat API (推荐)",
                 "url": "https://api.kourichat.com/v1",
                 "register_url": "https://api.kourichat.com/register",
                 "status": "active",
-                "priority": 2
+                "priority": 1
             },
             {
                 "id": "moonshot",
@@ -2249,7 +2241,7 @@ def get_vision_api_configs():
                 "url": "https://api.moonshot.cn/v1",
                 "register_url": "https://platform.moonshot.cn/console/api-keys",
                 "status": "active",
-                "priority": 3
+                "priority": 2
             },
             {
                 "id": "openai",
@@ -2257,19 +2249,16 @@ def get_vision_api_configs():
                 "url": "https://api.openai.com/v1",
                 "register_url": "https://platform.openai.com/api-keys",
                 "status": "active",
-                "priority": 4
+                "priority": 3
             },
         ]
         
         # 构建模型配置 - 只包含支持图像识别的模型
         vision_models = {
-            "kourichat-global": [
-                {"id": "kourichat-vision", "name": "KouriChat Vision", "status": "active"},
-                {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro", "status": "active"}
-            ],
             "kourichat-asia": [
                 {"id": "kourichat-vision", "name": "kourichat-vision"},
-                {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro"}
+                {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro"},
+                {"id": "gpt-4o", "name": "GPT-4o"}
             ],
             "moonshot": [
                 {"id": "moonshot-v1-8k-vision-preview", "name": "moonshot-v1-8k-vision-preview"}
