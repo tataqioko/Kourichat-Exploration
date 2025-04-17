@@ -180,9 +180,7 @@ class TimeRecognitionService:
             start = response.find('{')
             end = response.rfind('}')
             
-            if start == -1 or end == -1:
-                logger.error("响应中未找到有效的JSON结构")
-                return None
+
             
             # 提取JSON部分
             json_str = response[start:end + 1]

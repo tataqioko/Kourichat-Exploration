@@ -6,7 +6,6 @@
 - API响应处理
 - 多媒体消息处理
 """
-
 import logging
 import threading
 import time
@@ -419,8 +418,8 @@ class MessageHandler:
         is_system_message = sender_name == "System" or username == "System"
 
         # 发送文本消息和表情
-        if '$' in reply:
-            parts = [p.strip() for p in reply.split('$') if p.strip()]
+        if '$' in reply or '＄' in reply:
+            parts = [p.strip() for p in reply.replace("＄", "$").split("$") if p.strip()]
             for part in parts:
                 # 检查当前部分是否包含表情标签
                 emotion_tags = self.emoji_handler.extract_emotion_tags(part)
