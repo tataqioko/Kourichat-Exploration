@@ -404,12 +404,10 @@
         }
         
         .temperature-slider::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
             width: 20px;
             height: 20px;
             border-radius: 50%;
-            background: #fff;
+            background: var(--card-bg);
             border: 2px solid rgb(13, 110, 253);
             cursor: pointer;
             box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
@@ -424,7 +422,7 @@
             width: 20px;
             height: 20px;
             border-radius: 50%;
-            background: #fff;
+            background: var(--card-bg);
             border: 2px solid rgb(13, 110, 253);
             cursor: pointer;
             box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
@@ -580,8 +578,7 @@
         <select class="form-select mb-2" id="api_provider_select" onchange="updateApiProvider(this.value)" aria-label="选择API提供商">
             <!-- 移除请选择服务提供商选项 -->
             <!-- 预设常用选项，减少依赖异步加载 -->
-            <option value="kourichat-global" data-url="https://api.ciallo.ac.cn/v1" data-register="https://api.kourichat.com/register">KouriChat API (全球优化)</option>
-            <option value="kourichat-asia" data-url="https://api.kourichat.com/v1" data-register="https://api.kourichat.com/register">KouriChat API (亚太备线)</option>
+            <option value="kourichat-asia" data-url="https://api.kourichat.com/v1" data-register="https://api.kourichat.com/register">KouriChat API </option>
             <option value="siliconflow" data-url="https://api.siliconflow.cn/v1/" data-register="https://www.siliconflow.cn">硅基流动 API</option>
             <option value="deepseek" data-url="https://api.deepseek.com/v1" data-register="https://platform.deepseek.com">DeepSeek API</option>
             <option value="ollama" data-url="http://localhost:11434/api/chat" data-register="https://ollama.ai">本地 Ollama</option>
@@ -951,6 +948,10 @@
                     }
                 });
             }
+            
+            // 添加自定义模型选项 - 无论选择哪个供应商都添加
+            modelSelect.innerHTML += '<option value="custom">自定义模型</option>';
+            
         } catch (error) {
             console.error('更新模型选项失败:', error);
         } finally {
@@ -964,7 +965,6 @@
             } else if (currentModelValue) {
                 // 如果当前值不在预设列表中且不为空，视为自定义模型
                 // 添加自定义选项到下拉列表
-                modelSelect.innerHTML += '<option value="custom">自定义模型</option>';
                 modelSelect.value = 'custom';
                 
                 // 显示自定义输入框并设置值
@@ -984,7 +984,7 @@
                     modelSelect.value = recommendedOption.value;
                 } else {
                     // 如果没有推荐模型，选择第一个有效选项
-                    modelSelect.selectedIndex = 1;
+                    modelSelect.selectedIndex = 0;
                 }
                 
                 // 更新隐藏的值
@@ -1000,7 +1000,6 @@
     function updateModel(value) {
         const modelInput = document.getElementById('MODEL');
         const customModelInput = document.getElementById('customModelInput');
-        const apiSelect = document.getElementById('api_provider_select');
         
         if (value === 'custom') {
             customModelInput.style.display = 'block';
@@ -1066,9 +1065,8 @@
         <select class="form-select mb-2" id="vision_api_provider_select" onchange="updateVisionApiProvider(this.value)" aria-label="选择图像识别API提供商">
             <!-- 移除请选择服务提供商选项 -->
             <!-- 预设常用选项，减少依赖异步加载 -->
-            <option value="kourichat-global" data-url="https://api.ciallo.ac.cn/v1" data-register="https://api.ciallo.ac.cn/v1">KouriChat API (全球优化)</option>
-            <option value="kourichat-asia" data-url="https://api.kourichat.com/v1" data-register="https://api.kourichat.com/v1">KouriChat API (亚太备线)</option>
-            <option value="moonshot" data-url="https://api.moonshot.cn/v1" data-register="https://platform.moonshot.cn/console/api-keys">Moonshot AI (推荐)</option>
+            <option value="kourichat-asia" data-url="https://api.kourichat.com/v1" data-register="https://api.kourichat.com/register">KouriChat API </option>
+            <option value="moonshot" data-url="https://api.moonshot.cn/v1" data-register="https://platform.moonshot.cn/console/api-keys">Moonshot AI</option>
             <option value="openai" data-url="https://api.openai.com/v1" data-register="https://platform.openai.com/api-keys">OpenAI</option>
             <option value="custom">自定义服务提供商</option>
         </select>
@@ -1096,20 +1094,14 @@
     let visionModelConfigs = {
         api_providers: [
             {
-                id: "kourichat-global",
-                name: "KouriChat API (全球优化)",
-                url: "https://api.ciallo.ac.cn/v1",
-                register_url: "https://api.ciallo.ac.cn"
-            },
-            {
                 id: "kourichat-asia",
-                name: "KouriChat API (亚太备线)",
+                name: "KouriChat API (推荐)",
                 url: "https://api.kourichat.com/v1",
                 register_url: "https://api.kourichat.com/register"
             },
             {
                 id: "moonshot",
-                name: "Moonshot AI (推荐)",
+                name: "Moonshot AI",
                 url: "https://api.moonshot.cn/v1",
                 register_url: "https://platform.moonshot.cn/console/api-keys"
             },
@@ -1121,13 +1113,10 @@
             }
         ],
         models: {
-            "kourichat-global": [
-                {id: "kourichat-vision", name: "KouriChat Vision (推荐)"},
-                {id: "gemini-2.5-pro", name: "Gemini 2.5 Pro"}
-            ],
             "kourichat-asia": [
                 {id: "kourichat-vision", name: "KouriChat Vision (推荐)"},
-                {id: "gemini-2.5-pro", name: "Gemini 2.5 Pro"}
+                {id: "gemini-2.5-pro", name: "Gemini 2.5 Pro"},
+                {id: "gpt-4o", name: "GPT-4o"}
             ],
             "moonshot": [
                 {id: "moonshot-v1-8k-vision-preview", name: "Moonshot V1 8K Vision (推荐)"},
@@ -1358,9 +1347,6 @@
             "kourichat-asia": [
                 {id: "kourichat-vision", name: "KouriChat Vision (推荐)"}
             ],
-            "kourichat-global": [
-                {id: "kourichat-vision", name: "KouriChat Vision (推荐)"}
-            ],
             "moonshot": [
                 {id: "moonshot-v1-8k-vision-preview", name: "Moonshot V1 8K Vision (推荐)"},
                 {id: "moonshot-v1-32k-vision", name: "Moonshot V1 32K Vision"}
@@ -1373,15 +1359,17 @@
         
         // 如果是自定义提供商或没有选择提供商
         if (providerId === 'custom' || !providerId) {
-            modelSelect.disabled = true;
             if (providerId === 'custom') {
                 // 添加自定义选项
                 modelSelect.innerHTML += '<option value="custom">自定义模型</option>';
                 modelSelect.value = 'custom';
+                modelSelect.disabled = false;
                 
                 // 显示自定义输入框并设置当前值
                 customModelInput.style.display = 'block';
                 customModelInput.querySelector('input').value = currentModelValue;
+            } else {
+                modelSelect.disabled = true;
             }
             return;
         }
@@ -1402,6 +1390,9 @@
             modelSelect.innerHTML += `<option value="${model.id}">${model.name}</option>`;
         });
         
+        // 添加自定义模型选项 - 无论选择哪个供应商都添加
+        modelSelect.innerHTML += '<option value="custom">自定义模型</option>';
+        
         // 检查当前值是否存在于模型列表中
         const modelExists = models.some(m => m.id === currentModelValue);
         
@@ -1412,7 +1403,6 @@
         } else if (currentModelValue) {
             // 如果当前值不在预设列表中且不为空，视为自定义模型
             // 添加自定义选项到下拉列表
-            modelSelect.innerHTML += '<option value="custom">自定义模型</option>';
             modelSelect.value = 'custom';
             
             // 显示自定义输入框并设置值
@@ -1441,10 +1431,8 @@
     function updateVisionModel(value) {
         const modelInput = document.getElementById('VISION_MODEL');
         const customModelInput = document.getElementById('customVisionModelInput');
-        const apiSelect = document.getElementById('vision_api_provider_select');
         
-        // 只在自定义API提供商模式下才允许自定义模型
-        if (value === 'custom' && apiSelect.value === 'custom') {
+        if (value === 'custom') {
             customModelInput.style.display = 'block';
             customModelInput.querySelector('input').focus();
         } else {
@@ -1601,8 +1589,7 @@
                                         <!-- 添加和管理任务的按钮 -->
                                         <div class="mb-3 list-group">
                                             <a href="#" class="list-group-item list-group-item-action" 
-                                               data-bs-toggle="modal" data-bs-target="#addTaskModal"
-                                               style="background: rgba(30, 41, 59, 0.5);">
+                                               data-bs-toggle="modal" data-bs-target="#addTaskModal">
                                                 <i class="bi bi-plus-lg me-2"></i>
                                                 添加定时任务
                                                 <i class="bi bi-chevron-right float-end mt-1"></i>
@@ -1612,8 +1599,7 @@
                                         <!-- 任务列表管理按钮 -->
                                         <div class="mb-3 list-group">
                                             <a href="#" class="list-group-item list-group-item-action" 
-                                               data-bs-toggle="modal" data-bs-target="#taskListModal"
-                                               style="background: rgba(30, 41, 59, 0.5);">
+                                               data-bs-toggle="modal" data-bs-target="#taskListModal">
                                                 <i class="bi bi-list-ul me-2"></i>
                                                 任务列表管理
                                                 <i class="bi bi-chevron-right float-end mt-1"></i>
@@ -1873,7 +1859,7 @@
                                     <label class="form-label">
                                         <i class="bi bi-eye me-2"></i>执行时间预览
                                     </label>
-                                    <div id="schedulePreview" class="form-control bg-light">
+                                    <div id="schedulePreview" class="form-control">
                                         请选择定时类型和设置
                                     </div>
                                 </div>

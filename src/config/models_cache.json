@@ -2,7 +2,7 @@
     "api_providers": [
         {
             "id": "kourichat",
-            "name": "KouriChat API",
+            "name": "KouriChat API (推荐)",
             "url": "https://api.kourichat.com/v1",
             "register_url": "https://api.kourichat.com/register",
             "status": "active",
