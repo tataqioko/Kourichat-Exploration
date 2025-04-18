@@ -5,13 +5,15 @@ from typing import List, Dict, Optional
 from datetime import datetime
 from src.services.ai.llm_service import LLMService
 
-logger = logging.getLogger('main')
+# 获取日志记录器
+logger = logging.getLogger('memory')
 
 class MemoryService:
     """
     新版记忆服务模块，包含两种记忆类型:
     1. 短期记忆：用于保存最近对话，在程序重启后加载到上下文
     2. 核心记忆：精简的用户核心信息摘要(50-100字)
+    每个用户拥有独立的记忆存储空间
     """
     def __init__(self, root_dir: str, api_key: str, base_url: str, model: str, max_token: int, temperature: float):
         self.root_dir = root_dir
@@ -21,15 +23,15 @@ class MemoryService:
         self.max_token = max_token
         self.temperature = temperature
         self.llm_client = None
-        self.conversation_count = {}  # 记录每个角色的对话计数: {avatar_name: count}
+        self.conversation_count = {}  # 记录每个角色与用户组合的对话计数: {avatar_name_user_id: count}
 
-    def initialize_memory_files(self, avatar_name: str):
+    def initialize_memory_files(self, avatar_name: str, user_id: str):
         """初始化角色的记忆文件，确保文件存在"""
         try:
             # 确保记忆目录存在
-            memory_dir = self._get_avatar_memory_dir(avatar_name)
-            short_memory_path = self._get_short_memory_path(avatar_name)
-            core_memory_path = self._get_core_memory_path(avatar_name)
+            memory_dir = self._get_avatar_memory_dir(avatar_name, user_id)
+            short_memory_path = self._get_short_memory_path(avatar_name, user_id)
+            core_memory_path = self._get_core_memory_path(avatar_name, user_id)
             
             # 初始化短期记忆文件（如果不存在）
             if not os.path.exists(short_memory_path):
@@ -63,23 +65,23 @@ class MemoryService:
             )
         return self.llm_client
 
-    def _get_avatar_memory_dir(self, avatar_name: str) -> str:
+    def _get_avatar_memory_dir(self, avatar_name: str, user_id: str) -> str:
         """获取角色记忆目录，如果不存在则创建"""
-        avatar_memory_dir = os.path.join(self.root_dir, "data", "avatars", avatar_name, "memory")
+        avatar_memory_dir = os.path.join(self.root_dir, "data", "avatars", avatar_name, "memory", user_id)
         os.makedirs(avatar_memory_dir, exist_ok=True)
         return avatar_memory_dir
     
-    def _get_short_memory_path(self, avatar_name: str) -> str:
+    def _get_short_memory_path(self, avatar_name: str, user_id: str) -> str:
         """获取短期记忆文件路径"""
-        memory_dir = self._get_avatar_memory_dir(avatar_name)
+        memory_dir = self._get_avatar_memory_dir(avatar_name, user_id)
         return os.path.join(memory_dir, "short_memory.json")
     
-    def _get_core_memory_path(self, avatar_name: str) -> str:
+    def _get_core_memory_path(self, avatar_name: str, user_id: str) -> str:
         """获取核心记忆文件路径"""
-        memory_dir = self._get_avatar_memory_dir(avatar_name)
+        memory_dir = self._get_avatar_memory_dir(avatar_name, user_id)
         return os.path.join(memory_dir, "core_memory.json")
     
-    def add_conversation(self, avatar_name: str, user_message: str, bot_reply: str, is_system_message: bool = False):
+    def add_conversation(self, avatar_name: str, user_message: str, bot_reply: str, user_id: str, is_system_message: bool = False):
         """
         添加对话到短期记忆，并更新对话计数。
         每达到10轮对话，自动更新核心记忆。
@@ -88,11 +90,13 @@ class MemoryService:
             avatar_name: 角色名称
             user_message: 用户消息
             bot_reply: 机器人回复
+            user_id: 用户ID，用于隔离不同用户的记忆
             is_system_message: 是否为系统消息，如果是则不记录
         """
         # 确保对话计数器已初始化
-        if avatar_name not in self.conversation_count:
-            self.conversation_count[avatar_name] = 0
+        conversation_key = f"{avatar_name}_{user_id}"
+        if conversation_key not in self.conversation_count:
+            self.conversation_count[conversation_key] = 0
             
         # 如果是系统消息或错误消息则跳过记录
         if is_system_message or bot_reply.startswith("Error:"):
@@ -101,8 +105,11 @@ class MemoryService:
             
         try:
             # 确保记忆目录存在
-            memory_dir = self._get_avatar_memory_dir(avatar_name)
-            short_memory_path = self._get_short_memory_path(avatar_name)
+            memory_dir = self._get_avatar_memory_dir(avatar_name, user_id)
+            short_memory_path = self._get_short_memory_path(avatar_name, user_id)
+            
+            logger.info(f"保存对话到用户记忆: 角色={avatar_name}, 用户ID={user_id}")
+            logger.debug(f"记忆存储路径: {short_memory_path}")
             
             # 读取现有短期记忆
             short_memory = []
@@ -131,24 +138,26 @@ class MemoryService:
                 json.dump(short_memory, f, ensure_ascii=False, indent=2)
             
             # 更新对话计数
-            self.conversation_count[avatar_name] += 1
+            self.conversation_count[conversation_key] += 1
+            current_count = self.conversation_count[conversation_key]
+            logger.debug(f"当前对话计数: {current_count}/10 (角色={avatar_name}, 用户ID={user_id})")
             
             # 每10轮对话更新一次核心记忆
-            if self.conversation_count[avatar_name] >= 10:
-                logger.info(f"角色 {avatar_name} 达到10轮对话，开始更新核心记忆")
-                self.update_core_memory(avatar_name)
-                self.conversation_count[avatar_name] = 0
+            if self.conversation_count[conversation_key] >= 10:
+                logger.info(f"角色 {avatar_name} 为用户 {user_id} 达到10轮对话，开始更新核心记忆")
+                self.update_core_memory(avatar_name, user_id)
+                self.conversation_count[conversation_key] = 0
                 
         except Exception as e:
             logger.error(f"添加对话到短期记忆失败: {str(e)}")
     
-    def update_core_memory(self, avatar_name: str):
+    def update_core_memory(self, avatar_name: str, user_id: str):
         """
         更新核心记忆，将短期记忆和现有核心记忆整合，生成新的核心记忆摘要
         """
         try:
-            short_memory_path = self._get_short_memory_path(avatar_name)
-            core_memory_path = self._get_core_memory_path(avatar_name)
+            short_memory_path = self._get_short_memory_path(avatar_name, user_id)
+            core_memory_path = self._get_core_memory_path(avatar_name, user_id)
             
             # 读取短期记忆
             short_memory = []
@@ -157,7 +166,7 @@ class MemoryService:
                     short_memory = json.load(f)
             
             if not short_memory:
-                logger.info(f"短期记忆为空，跳过核心记忆更新: {avatar_name}")
+                logger.info(f"短期记忆为空，跳过核心记忆更新: {avatar_name} 用户: {user_id}")
                 return
             
             # 读取现有核心记忆
@@ -202,9 +211,10 @@ class MemoryService:
             
             # 调用LLM生成新的核心记忆
             llm = self._get_llm_client()
+            client_id = f"core_memory_{avatar_name}_{user_id}"
             new_core_memory = llm.get_response(
                 message=prompt,
-                user_id=f"core_memory_{avatar_name}",
+                user_id=client_id,
                 system_prompt="你是一个专注于信息提炼的AI助手。你的任务是从对话中提取最关键的信息，并创建一个极其精简的摘要。"
             )
             
@@ -217,40 +227,53 @@ class MemoryService:
             with open(core_memory_path, "w", encoding="utf-8") as f:
                 json.dump(core_data, f, ensure_ascii=False, indent=2)
             
-            logger.info(f"已更新角色 {avatar_name} 的核心记忆")
+            logger.info(f"已更新角色 {avatar_name} 为用户 {user_id} 的核心记忆")
             
         except Exception as e:
             logger.error(f"更新核心记忆失败: {str(e)}")
     
-    def get_core_memory(self, avatar_name: str) -> str:
+    def get_core_memory(self, avatar_name: str, user_id: str) -> str:
         """获取角色的核心记忆内容"""
         try:
-            core_memory_path = self._get_core_memory_path(avatar_name)
+            core_memory_path = self._get_core_memory_path(avatar_name, user_id)
             
             if not os.path.exists(core_memory_path):
-                logger.info(f"核心记忆不存在: {avatar_name}")
+                logger.info(f"核心记忆不存在: {avatar_name} 用户: {user_id}")
                 return ""
+            
+            logger.debug(f"获取用户核心记忆: 角色={avatar_name}, 用户ID={user_id}")
+            logger.debug(f"核心记忆路径: {core_memory_path}")
             
             with open(core_memory_path, "r", encoding="utf-8") as f:
                 core_data = json.load(f)
-                return core_data.get("content", "")
+                core_memory = core_data.get("content", "")
+                logger.debug(f"核心记忆长度: {len(core_memory)} 字节")
+                return core_memory
                 
         except Exception as e:
             logger.info(f"获取核心记忆失败: {str(e)}")
             return ""
     
-    def get_recent_context(self, avatar_name: str, context_size: int = 5) -> List[Dict]:
+    def get_recent_context(self, avatar_name: str, user_id: str, context_size: int = 5) -> List[Dict]:
         """
         获取最近的对话上下文，用于重启后恢复对话连续性
         默认使用最近5轮对话作为上下文
         返回格式为LLM使用的消息列表格式
+        
+        Args:
+            avatar_name: 角色名称
+            user_id: 用户ID，用于获取特定用户的记忆
+            context_size: 获取的对话轮数，默认5轮
         """
         try:
-            short_memory_path = self._get_short_memory_path(avatar_name)
+            short_memory_path = self._get_short_memory_path(avatar_name, user_id)
             
             if not os.path.exists(short_memory_path):
-                logger.info(f"短期记忆不存在: {avatar_name}")
+                logger.info(f"短期记忆不存在: {avatar_name} 用户: {user_id}")
                 return []
+            
+            logger.debug(f"获取最近上下文: 角色={avatar_name}, 用户ID={user_id}, 轮数={context_size}")
+            logger.debug(f"短期记忆路径: {short_memory_path}")
             
             with open(short_memory_path, "r", encoding="utf-8") as f:
                 short_memory = json.load(f)
@@ -261,6 +284,7 @@ class MemoryService:
                 context.append({"role": "user", "content": conv["user"]})
                 context.append({"role": "assistant", "content": conv["bot"]})
             
+            logger.debug(f"已加载 {len(context)//2} 轮对话作为上下文")
             return context
             
         except Exception as e:

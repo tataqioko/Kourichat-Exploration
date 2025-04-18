@@ -46,15 +46,15 @@ class DiaryService:
             )
         return self.llm_client
     
-    def _get_avatar_memory_dir(self, avatar_name: str) -> str:
+    def _get_avatar_memory_dir(self, avatar_name: str, user_id: str) -> str:
         """获取角色记忆目录，如果不存在则创建"""
-        avatar_memory_dir = os.path.join(self.root_dir, "data", "avatars", avatar_name, "memory")
+        avatar_memory_dir = os.path.join(self.root_dir, "data", "avatars", avatar_name, "memory", user_id)
         os.makedirs(avatar_memory_dir, exist_ok=True)
         return avatar_memory_dir
     
-    def _get_short_memory_path(self, avatar_name: str) -> str:
+    def _get_short_memory_path(self, avatar_name: str, user_id: str) -> str:
         """获取短期记忆文件路径"""
-        memory_dir = self._get_avatar_memory_dir(avatar_name)
+        memory_dir = self._get_avatar_memory_dir(avatar_name, user_id)
         return os.path.join(memory_dir, "short_memory.json")
     
     def _get_avatar_prompt_path(self, avatar_name: str) -> str:
@@ -62,11 +62,12 @@ class DiaryService:
         avatar_dir = os.path.join(self.root_dir, "data", "avatars", avatar_name)
         return os.path.join(avatar_dir, "avatar.md")
     
-    def _get_diary_filename(self, avatar_name: str) -> str:
+    def _get_diary_filename(self, avatar_name: str, user_id: str) -> str:
         """生成唯一的日记文件名"""
-        memory_dir = self._get_avatar_memory_dir(avatar_name)
+        memory_dir = self._get_avatar_memory_dir(avatar_name, user_id)
         date_str = datetime.now().strftime("%Y-%m-%d")
-        base_filename = f"diary_{date_str}"
+        # 在文件名中体现用户ID
+        base_filename = f"diary_{user_id}_{date_str}"
         
         # 检查是否已存在同名文件，如有需要添加序号
         index = 1
@@ -80,19 +81,20 @@ class DiaryService:
             
         return file_path
     
-    def generate_diary(self, avatar_name: str) -> str:
+    def generate_diary(self, avatar_name: str, user_id: str) -> str:
         """
         根据最近对话和角色设定生成日记
         
         Args:
             avatar_name: 角色名称
+            user_id: 用户ID，用于获取特定用户的记忆
             
         Returns:
             str: 生成的日记内容，如果发生错误则返回错误消息
         """
         try:
             # 读取短期记忆
-            short_memory_path = self._get_short_memory_path(avatar_name)
+            short_memory_path = self._get_short_memory_path(avatar_name, user_id)
             if not os.path.exists(short_memory_path):
                 logger.error(f"短期记忆文件不存在: {short_memory_path}")
                 return "无法找到最近的对话记录，无法生成日记。"
@@ -105,7 +107,7 @@ class DiaryService:
                 return "对话记录格式错误，无法生成日记。"
             
             if not short_memory:
-                logger.warning(f"短期记忆为空: {avatar_name}")
+                logger.warning(f"短期记忆为空: {avatar_name} 用户: {user_id}")
                 return "最近没有进行过对话，无法生成日记。"
             
             # 读取角色设定
@@ -130,7 +132,7 @@ class DiaryService:
             
             # 构建提示词
             current_date = datetime.now().strftime("%Y年%m月%d日")
-            prompt = f"""请你以第一人称视角，根据我的角色设定和最近的对话内容，撰写一篇今日日记。
+            prompt = f"""请你以第一人称视角，根据角色设定和最近的对话内容，撰写一篇今日日记。
 
 要求：
 1. 严格控制在500字以内
@@ -161,9 +163,10 @@ class DiaryService:
             
             # 调用LLM生成日记
             llm = self._get_llm_client()
+            client_id = f"diary_{avatar_name}_{user_id}"
             diary_content = llm.get_response(
                 message=prompt,
-                user_id=str(f"diary_{avatar_name}"),
+                user_id=client_id,
                 system_prompt=f"你是一个专注于写作的AI助手。你的任务是以指定角色的第一人称视角，根据对话内容和角色设定，撰写一篇真实、情感丰富的日记。请确保日记以\"{avatar_name}小日记 {current_date}\"为标题，分成2个段落，段落之间使用空行分隔。绝对不要使用任何分行符号($)、表情符号或表情标签([love]等)。保持文本格式简洁，避免使用任何可能导致消息分割的特殊符号。"
             )
             
@@ -171,11 +174,11 @@ class DiaryService:
             diary_content = self._format_diary_content(diary_content, avatar_name)
             
             # 保存日记到文件
-            diary_path = self._get_diary_filename(avatar_name)
+            diary_path = self._get_diary_filename(avatar_name, user_id)
             try:
                 with open(diary_path, "w", encoding="utf-8") as f:
                     f.write(diary_content)
-                logger.info(f"已生成{avatar_name}小日记并保存至: {diary_path}")
+                logger.info(f"已生成{avatar_name}小日记 用户: {user_id} 并保存至: {diary_path}")
             except Exception as e:
                 logger.error(f"保存日记文件失败: {str(e)}")
                 return f"日记生成成功但保存失败: {str(e)}"

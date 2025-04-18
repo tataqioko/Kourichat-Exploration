@@ -181,7 +181,8 @@ class LLMService:
             # —— 阶段2：上下文更新 ——
             # 只在程序刚启动时（上下文为空时）加载外部历史上下文
             if previous_context and user_id not in self.chat_contexts:
-                logger.info(f"程序启动初始化：加载历史上下文，共 {len(previous_context)} 条消息")
+                logger.info(f"程序启动初始化：为用户 {user_id} 加载历史上下文，共 {len(previous_context)} 条消息")
+                # 确保上下文只包含当前用户的历史信息
                 self.chat_contexts[user_id] = previous_context.copy()
             
             # 添加当前消息到上下文

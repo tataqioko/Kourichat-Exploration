@@ -400,10 +400,15 @@ def main():
             os.makedirs(memory_dir)
             print_status(f"创建角色记忆目录: {memory_dir}", "success", "CHECK")
         
-        # 初始化记忆文件
+        # 初始化记忆文件 - 为每个监听用户创建独立的记忆文件
         print_status("初始化记忆文件...", "info", "FILE")
-        memory_service.initialize_memory_files(avatar_name)
-        print_status("记忆文件初始化完成", "success", "CHECK")
+        
+        # 为每个监听的用户创建独立记忆
+        for user_name in listen_list:
+            print_status(f"为用户 '{user_name}' 创建独立记忆...", "info", "USER")
+            # 使用用户名作为用户ID
+            memory_service.initialize_memory_files(avatar_name, user_id=user_name)
+            print_status(f"用户 '{user_name}' 记忆初始化完成", "success", "CHECK")
 
         avatar_dir = os.path.join(root_dir, config.behavior.context.avatar_dir)
         prompt_path = os.path.join(avatar_dir, "avatar.md")

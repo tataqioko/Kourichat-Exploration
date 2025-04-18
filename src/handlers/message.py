@@ -96,6 +96,11 @@ class MessageHandler:
     def save_message(self, sender_id: str, sender_name: str, message: str, reply: str, is_system_message: bool = False):
         """保存聊天记录到数据库和短期记忆"""
         try:
+            # 清理回复中的@前缀，避免在记忆中累积
+            clean_reply = reply
+            if reply.startswith(f"@{sender_name} "):
+                clean_reply = reply[len(f"@{sender_name} "):]
+            
             # 保存到数据库
             session = Session()
             chat_message = ChatMessage(
@@ -111,13 +116,13 @@ class MessageHandler:
             # 使用新的记忆服务保存对话
             # 获取当前角色名
             avatar_name = self.current_avatar
-            # 添加到记忆，传递系统消息标志
-            self.memory_service.add_conversation(avatar_name, message, reply, is_system_message)
+            # 添加到记忆，传递系统消息标志和用户ID
+            self.memory_service.add_conversation(avatar_name, message, clean_reply, sender_id, is_system_message)
             
         except Exception as e:
             logger.error(f"保存消息失败: {str(e)}")
 
-    def get_api_response(self, message: str, user_id: str) -> str:
+    def get_api_response(self, message: str, user_id: str, is_group: bool = False) -> str:
         """获取 API 回复（含记忆增强）"""
         avatar_dir = os.path.join(self.root_dir, config.behavior.context.avatar_dir)
         prompt_path = os.path.join(avatar_dir, "avatar.md")
@@ -130,24 +135,38 @@ class MessageHandler:
                 avatar_content = f.read()
                 logger.debug(f"角色提示文件大小: {len(avatar_content)} bytes")
 
-            # 步骤2：获取核心记忆
-            core_memory = self.memory_service.get_core_memory(avatar_name)
+            # 步骤2：获取核心记忆 - 使用用户ID获取对应的记忆
+            core_memory = self.memory_service.get_core_memory(avatar_name, user_id=user_id)
             core_memory_prompt = f"# 核心记忆\n{core_memory}" if core_memory else ""
             logger.debug(f"核心记忆长度: {len(core_memory)}")
             
-            # 步骤4：获取历史上下文（仅在程序重启时）
+            # 步骤3：获取历史上下文（仅在程序重启时）
             # 检查是否已经为该用户加载过上下文
             recent_context = None
             if user_id not in self.deepseek.chat_contexts:
-                recent_context = self.memory_service.get_recent_context(avatar_name)
+                recent_context = self.memory_service.get_recent_context(avatar_name, user_id)
                 if recent_context:
                     logger.info(f"程序启动：为用户 {user_id} 加载 {len(recent_context)} 条历史上下文消息")
+                    logger.debug(f"用户 {user_id} 的历史上下文: {recent_context}")
+            
+            # 如果是群聊场景，添加群聊环境提示
+            if is_group:
+                # 在系统提示中添加群聊场景说明
+                group_chat_prompt = """
+# 群聊环境提示
+你现在处于群聊环境中，会收到来自不同用户的消息。每条消息都会标明发送者为:<xxx>。
+请注意区分不同的发言人，并在回复时考虑整个群聊的上下文。
+"""
+                # 将群聊提示添加到系统提示之后
+                combined_system_prompt = f"{avatar_content}\n\n{group_chat_prompt}"
+            else:
+                combined_system_prompt = avatar_content
             
             # 调用API，传入人设提示和核心记忆（分开）
             response = self.deepseek.get_response(
                 message=message, 
                 user_id=user_id, 
-                system_prompt=avatar_content, 
+                system_prompt=combined_system_prompt, 
                 previous_context=recent_context,
                 core_memory=core_memory_prompt
             )
@@ -305,7 +324,13 @@ class MessageHandler:
     def _handle_voice_request(self, content, chat_id, sender_name, username, is_group):
         """处理语音请求"""
         logger.info("处理语音请求")
-        reply = self.get_api_response(content, chat_id)
+        # 对于群聊消息，使用更清晰的对话格式
+        if is_group:
+            api_content = f"<用户 {sender_name}>\n{content}\n</用户>"
+        else:
+            api_content = content
+        
+        reply = self.get_api_response(api_content, chat_id, is_group)
         if "</think>" in reply:
             reply = reply.split("</think>", 1)[1].strip()
         
@@ -332,13 +357,21 @@ class MessageHandler:
         is_system_message = sender_name == "System" or username == "System"
         
         # 异步保存消息记录
+        # 保存实际用户发送的内容，群聊中保留发送者信息
+        save_content = api_content if is_group else content
         threading.Thread(target=self.save_message, 
-                       args=(username, sender_name, content, reply, is_system_message)).start()
+                       args=(chat_id, sender_name, save_content, reply, is_system_message)).start()
         return reply
         
     def _handle_random_image_request(self, content, chat_id, sender_name, username, is_group):
         """处理随机图片请求"""
         logger.info("处理随机图片请求")
+        # 对于群聊消息，使用更清晰的对话格式
+        if is_group:
+            api_content = f"<用户 {sender_name}>\n{content}\n</用户>"
+        else:
+            api_content = content
+        
         image_path = self.image_handler.get_random_image()
         if image_path:
             try:
@@ -358,18 +391,26 @@ class MessageHandler:
                 reply = f"@{sender_name} {reply}"
             self.wx.SendMsg(msg=reply, who=chat_id)
             
-            # A判断是否是系统消息
+            # 判断是否是系统消息
             is_system_message = sender_name == "System" or username == "System"
             
             # 异步保存消息记录
+            # 保存实际用户发送的内容，群聊中保留发送者信息
+            save_content = api_content if is_group else content
             threading.Thread(target=self.save_message, 
-                           args=(username, sender_name, content, reply, is_system_message)).start()
+                           args=(chat_id, sender_name, save_content, reply, is_system_message)).start()
             return reply
         return None
-            
+        
     def _handle_image_generation_request(self, content, chat_id, sender_name, username, is_group):
         """处理图像生成请求"""
         logger.info("处理画图请求")
+        # 对于群聊消息，使用更清晰的对话格式
+        if is_group:
+            api_content = f"<用户 {sender_name}>\n{content}\n</用户>"
+        else:
+            api_content = content
+        
         image_path = self.image_handler.generate_image(content)
         if image_path:
             try:
@@ -393,15 +434,22 @@ class MessageHandler:
             is_system_message = sender_name == "System" or username == "System"
             
             # 异步保存消息记录
+            # 保存实际用户发送的内容，群聊中保留发送者信息
+            save_content = api_content if is_group else content
             threading.Thread(target=self.save_message, 
-                           args=(username, sender_name, content, reply, is_system_message)).start()
+                           args=(chat_id, sender_name, save_content, reply, is_system_message)).start()
             return reply
         return None
 
     def _handle_text_message(self, content, chat_id, sender_name, username, is_group):
         """处理普通文本消息"""
-        # 获取AI回复
-        reply = self.get_api_response(content, chat_id)
+        # 对于群聊消息，使用更清晰的对话格式
+        if is_group:
+            api_content = f"<用户 {sender_name}>\n{content}\n</用户>"
+        else:
+            api_content = content
+        
+        reply = self.get_api_response(api_content, chat_id, is_group)
         logger.info(f"AI回复: {reply}")
 
         # 处理回复中的思考过程
@@ -472,9 +520,11 @@ class MessageHandler:
                 except Exception as e:
                     logger.error(f"发送表情失败 - {emotion_type}: {str(e)}")
 
-        # 异步保存消息记录，标记系统消息
+        # 异步保存消息记录
+        # 保存实际用户发送的内容，群聊中保留发送者信息
+        save_content = api_content if is_group else content
         threading.Thread(target=self.save_message,
-                        args=(username, sender_name, content, reply, is_system_message)).start()
+                        args=(chat_id, sender_name, save_content, reply, is_system_message)).start()
 
         return reply
 

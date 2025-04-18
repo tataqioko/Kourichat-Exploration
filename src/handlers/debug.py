@@ -81,15 +81,15 @@ class DebugCommandHandler:
             
         # 显示当前角色记忆
         elif cmd == "mem":
-            return True, self._show_memory(current_avatar)
+            return True, self._show_memory(current_avatar, user_id)
             
         # 重置当前角色的最近记忆
         elif cmd == "reset":
-            return True, self._reset_short_memory(current_avatar)
+            return True, self._reset_short_memory(current_avatar, user_id)
             
         # 清空当前角色的核心记忆
         elif cmd == "clear":
-            return True, self._clear_core_memory(current_avatar)
+            return True, self._clear_core_memory(current_avatar, user_id)
             
         # 清空当前角色的对话上下文
         elif cmd == "context":
@@ -97,7 +97,7 @@ class DebugCommandHandler:
         
         # 生成日记
         elif cmd == "diary":
-            return True, self._generate_diary(current_avatar)
+            return True, self._generate_diary(current_avatar, user_id)
             
         # 退出调试模式
         elif cmd == "exit":
@@ -118,12 +118,13 @@ class DebugCommandHandler:
 - /diary: 生成角色小日记
 - /exit: 退出调试模式"""
     
-    def _show_memory(self, avatar_name: str) -> str:
+    def _show_memory(self, avatar_name: str, user_id: str) -> str:
         """
         显示当前角色的记忆
         
         Args:
             avatar_name: 角色名
+            user_id: 用户ID
             
         Returns:
             str: 记忆信息
@@ -133,11 +134,11 @@ class DebugCommandHandler:
             
         try:
             # 获取核心记忆
-            core_memory = self.memory_service.get_core_memory(avatar_name)
+            core_memory = self.memory_service.get_core_memory(avatar_name, user_id)
             
-            # 获取短期记忆路径
+            # 获取对应的短期记忆路径
             short_memory_path = os.path.join(
-                self.avatars_dir, avatar_name, "memory", "short_memory.json"
+                self.avatars_dir, avatar_name, "memory", user_id, "short_memory.json"
             )
             
             # 读取最近5轮对话
@@ -150,14 +151,17 @@ class DebugCommandHandler:
                     logger.info(f"读取到 {len(recent_dialogues)} 条对话记录")
             
             # 组装信息
-            result = f"【当前角色: {avatar_name}】\n\n"
+            result = f"【当前角色: {avatar_name}】【用户: {user_id}】\n\n"
             
             # 显示核心记忆
             result += "【核心记忆】\n"
             if core_memory:
                 try:
-                    core_data = json.loads(core_memory)
-                    result += f"{core_data.get('content', '')}\n"
+                    if isinstance(core_memory, str):
+                        result += f"{core_memory}\n"
+                    else:
+                        core_data = json.loads(core_memory)
+                        result += f"{core_data.get('content', '')}\n"
                 except:
                     result += f"{core_memory}\n"
             else:
@@ -193,41 +197,44 @@ class DebugCommandHandler:
             logger.error(f"显示记忆失败: {str(e)}")
             return f"显示记忆时出错: {str(e)}"
     
-    def _reset_short_memory(self, avatar_name: str) -> str:
+    def _reset_short_memory(self, avatar_name: str, user_id: str) -> str:
         """
         重置当前角色的最近记忆
         
         Args:
             avatar_name: 角色名
+            user_id: 用户ID
             
         Returns:
             str: 操作结果
         """
         try:
+            # 获取对应的短期记忆路径
             short_memory_path = os.path.join(
-                self.avatars_dir, avatar_name, "memory", "short_memory.json"
+                self.avatars_dir, avatar_name, "memory", user_id, "short_memory.json"
             )
             
             if not os.path.exists(short_memory_path):
-                return f"角色 {avatar_name} 没有短期记忆文件"
+                return f"角色 {avatar_name} 用户 {user_id} 没有短期记忆文件"
             
             # 重置为空列表
             with open(short_memory_path, "w", encoding="utf-8") as f:
                 json.dump([], f, ensure_ascii=False, indent=2)
                 
-            logger.info(f"已重置角色 {avatar_name} 的短期记忆")
-            return f"已重置角色 {avatar_name} 的短期记忆"
+            logger.info(f"已重置角色 {avatar_name} 用户 {user_id} 的短期记忆")
+            return f"已重置角色 {avatar_name} 用户 {user_id} 的短期记忆"
             
         except Exception as e:
             logger.error(f"重置短期记忆失败: {str(e)}")
             return f"重置短期记忆时出错: {str(e)}"
     
-    def _clear_core_memory(self, avatar_name: str) -> str:
+    def _clear_core_memory(self, avatar_name: str, user_id: str) -> str:
         """
         清空当前角色的核心记忆
         
         Args:
             avatar_name: 角色名
+            user_id: 用户ID
             
         Returns:
             str: 操作结果
@@ -235,13 +242,14 @@ class DebugCommandHandler:
         try:
             if not self.memory_service:
                 return "错误: 记忆服务未初始化"
-                
+            
+            # 获取对应的核心记忆路径
             core_memory_path = os.path.join(
-                self.avatars_dir, avatar_name, "memory", "core_memory.json"
+                self.avatars_dir, avatar_name, "memory", user_id, "core_memory.json"
             )
             
             if not os.path.exists(core_memory_path):
-                return f"角色 {avatar_name} 没有核心记忆文件"
+                return f"角色 {avatar_name} 用户 {user_id} 没有核心记忆文件"
             
             # 清空核心记忆内容，保留文件结构
             core_data = {
@@ -252,8 +260,8 @@ class DebugCommandHandler:
             with open(core_memory_path, "w", encoding="utf-8") as f:
                 json.dump(core_data, f, ensure_ascii=False, indent=2)
                 
-            logger.info(f"已清空角色 {avatar_name} 的核心记忆")
-            return f"已清空角色 {avatar_name} 的核心记忆"
+            logger.info(f"已清空角色 {avatar_name} 用户 {user_id} 的核心记忆")
+            return f"已清空角色 {avatar_name} 用户 {user_id} 的核心记忆"
             
         except Exception as e:
             logger.error(f"清空核心记忆失败: {str(e)}")
@@ -285,12 +293,13 @@ class DebugCommandHandler:
             logger.error(f"清空对话上下文失败: {str(e)}")
             return f"清空对话上下文时出错: {str(e)}"
     
-    def _generate_diary(self, avatar_name: str) -> str:
+    def _generate_diary(self, avatar_name: str, user_id: str) -> str:
         """
         生成当前角色的日记
         
         Args:
             avatar_name: 角色名
+            user_id: 用户ID
             
         Returns:
             str: 生成的日记内容
@@ -300,12 +309,12 @@ class DebugCommandHandler:
             
         try:
             # 生成日记
-            diary_content = self.diary_service.generate_diary(avatar_name)
+            diary_content = self.diary_service.generate_diary(avatar_name, user_id)
             
             if not diary_content or diary_content.startswith("无法"):
                 return diary_content
                 
-            logger.info(f"已生成{avatar_name}小日记")
+            logger.info(f"已生成{avatar_name}小日记 用户: {user_id}")
             return diary_content
             
         except Exception as e:
