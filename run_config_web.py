@@ -2177,48 +2177,72 @@ def get_all_configs():
 
 @app.route('/get_announcement')
 def get_announcement():
-    """获取公告配置信息"""
     try:
-        # 读取公告配置
-        with open(ANNOUNCEMENT_CONFIG_PATH, 'r', encoding='utf-8') as f:
-            announcement_config = json.load(f)
+        data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+        announcement_file = os.path.join(data_path, 'announcement.json')
         
-        # 读取版本信息
-        version_file = os.path.join(ROOT_DIR, 'version.json')
-        if os.path.exists(version_file):
-            with open(version_file, 'r', encoding='utf-8') as f:
-                version_info = json.load(f)
-                # 更新公告内容，使用HTML格式化以支持更好的换行和显示
-                base_content = announcement_config['content']
+        if not os.path.exists(announcement_file):
+            # 创建默认公告
+            default_announcement = {
+                'enabled': True,
+                'title': '欢迎使用 KouriChat',
+                'content': """
+                <div class="p-3">
+                    <h4 class="mb-3">🌟 欢迎使用 KouriChat 系统</h4>
+                    <p>这是一个基于DeepSeek的AI情感陪伴系统，您可以配置并与AI进行沉浸式对话。</p>
+                    <p>初次使用请按以下步骤进行配置：</p>
+                    <ol>
+                        <li>在<strong>配置中心</strong>中设置AI模型API</li>
+                        <li>在<strong>角色设定</strong>中选择或创建角色</li>
+                        <li>点击<strong>启动</strong>按钮启动系统</li>
+                    </ol>
+                    <div class="mt-4 pt-3 border-top">
+                        <small class="text-muted">如需帮助，请加入QQ群：715616260 获取支持</small>
+                    </div>
+                </div>
+                """
+            }
+            with open(announcement_file, 'w', encoding='utf-8') as f:
+                json.dump(default_announcement, f, ensure_ascii=False, indent=4)
                 
-                # 正确处理description数组
-                description_html = ""
-                if isinstance(version_info['description'], list):
-                    # 如果是数组，将每个元素转换为HTML段落
-                    description_html = "<br>".join(version_info['description'])
-                else:
-                    # 如果是字符串，直接使用
-                    description_html = version_info['description'].replace(',', '<br>')
-                
-                version_content = f"""
-<div class="mt-3 pt-3 border-top">
-    <div class="mb-2"><strong>当前版本：</strong>{version_info['version']}</div>
-    <div class="mb-2"><strong>更新时间：</strong>{version_info['last_update']}</div>
-    <div><strong>更新内容：</strong><br>{description_html}</div>
-</div>
-"""
-                announcement_config['content'] = base_content + version_content
-                announcement_config['version'] = version_info['version']
+            return jsonify(default_announcement)
         
-        return jsonify(announcement_config)
+        # 读取公告文件
+        with open(announcement_file, 'r', encoding='utf-8') as f:
+            announcement = json.load(f)
+            
+        return jsonify(announcement)
+    except Exception as e:
+        print(f"获取公告时发生错误: {e}")
+        return jsonify({
+            'enabled': False,
+            'title': '公告读取失败',
+            'content': f'<div class="text-danger">错误信息: {str(e)}</div>'
+        })
+
+@app.route('/reconnect_wechat')
+def reconnect_wechat():
+    try:
+        # 导入微信登录点击器
+        from src.Wechat_Login_Clicker.Wechat_Login_Clicker import click_wechat_buttons
+        
+        # 执行点击操作
+        result = click_wechat_buttons()
+        
+        if result is False:
+            return jsonify({
+                'status': 'error',
+                'message': '找不到微信登录窗口'
+            })
+        
+        return jsonify({
+            'status': 'success',
+            'message': '微信重连操作已执行'
+        })
     except Exception as e:
         return jsonify({
             'status': 'error',
-            'message': f'读取公告配置失败: {str(e)}',
-            'enabled': True, 
-            'title': '系统公告',
-            'content': '无法加载公告内容，但系统正常运行中。',
-            'type': 'warning'
+            'message': f'微信重连失败: {str(e)}'
         })
 
 @app.route('/get_vision_api_configs')

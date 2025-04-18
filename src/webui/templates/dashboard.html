@@ -550,6 +550,50 @@
         [data-bs-theme="dark"] #announcementContent .border-top {
             border-top: 1px solid rgba(255,255,255,0.1) !important;
         }
+
+        .spin {
+            animation: spin 1s linear infinite;
+        }
+        
+        /* 微信重连按钮样式 */
+        .btn-wechat {
+            background-color: #07C160;  /* 微信绿色 */
+            color: white;
+            border: none;
+            padding: 0.5rem 1.2rem;
+            border-radius: 0.5rem;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 500;
+            font-size: 0.95rem;
+            height: 38px;
+            line-height: 1;
+        }
+
+        .btn-wechat:hover {
+            background-color: #06ad56;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 2px 4px rgba(7, 193, 96, 0.3);
+        }
+
+        .btn-wechat:active {
+            transform: translateY(0);
+            box-shadow: none;
+        }
+
+        .btn-wechat .bi-wechat {
+            font-size: 1.1em;
+            margin-right: 4px;
+        }
+        
+        .btn-wechat:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
     </style>
     <!-- 添加 dark-mode.js -->
     <script src="/static/js/bootstrap.bundle.min.js"></script>
@@ -661,6 +705,9 @@
                            class="list-group-item list-group-item-action" rel="noopener">
                             <i class="bi bi-download me-2"></i>下载发布版
                         </a>
+                        <button class="list-group-item list-group-item-action" type="button" onclick="showManualAnnouncement()">
+                            <i class="bi bi-bell me-2"></i>查看公告
+                        </button>
                     </div>
                 </div>
             </div>
@@ -775,6 +822,9 @@
                         <i class="bi bi-robot me-2"></i>机器人状态
                     </h4>
                     <div class="bot-controls">
+                        <button class="btn btn-wechat me-2" onclick="reconnectWechat()" id="reconnectBtn">
+                            <i class="bi bi-wechat"></i>微信重连
+                        </button>
                         <button class="btn btn-glass text-success me-2" onclick="startBot()" id="startBotBtn">
                             <i class="bi bi-play-fill me-1"></i>启动
                         </button>
@@ -1527,6 +1577,64 @@
                     Object.values(elements).forEach(el => {
                         if (el && el !== elements.status) el.textContent = '网络错误';
                     });
+                });
+        }
+
+        // 微信重连功能
+        function reconnectWechat() {
+            const loadingStatus = document.getElementById('botLoadingStatus');
+            const loadingText = document.getElementById('botLoadingText');
+            const reconnectBtn = document.getElementById('reconnectBtn');
+            const originalText = reconnectBtn.innerHTML;
+            
+            // 显示加载状态
+            loadingStatus.classList.remove('d-none');
+            loadingText.textContent = '正在尝试重新连接微信...';
+            reconnectBtn.disabled = true;
+            reconnectBtn.innerHTML = '<i class="bi bi-arrow-repeat me-2 spin"></i>连接中...';
+            
+            // 向后端发送重连请求
+            fetch('/reconnect_wechat')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showToast('微信重连成功', 'success');
+                        
+                        // 将重连过程的日志添加到控制台
+                        const logsElement = document.querySelector('.logs');
+                        const logLine = document.createElement('div');
+                        logLine.className = 'log-line';
+                        logLine.innerHTML = `<span class="log-timestamp">[${new Date().toLocaleTimeString()}]</span><span class="log-level-success">微信重连成功</span>`;
+                        logsElement.appendChild(logLine);
+                        scrollToBottom();
+                    } else {
+                        showToast('微信重连失败: ' + data.message, 'error');
+                        
+                        // 将错误信息添加到控制台
+                        const logsElement = document.querySelector('.logs');
+                        const logLine = document.createElement('div');
+                        logLine.className = 'log-line';
+                        logLine.innerHTML = `<span class="log-timestamp">[${new Date().toLocaleTimeString()}]</span><span class="log-level-error">微信重连失败: ${data.message}</span>`;
+                        logsElement.appendChild(logLine);
+                        scrollToBottom();
+                    }
+                })
+                .catch(error => {
+                    showToast('微信重连请求失败: ' + error, 'error');
+                    
+                    // 将错误信息添加到控制台
+                    const logsElement = document.querySelector('.logs');
+                    const logLine = document.createElement('div');
+                    logLine.className = 'log-line';
+                    logLine.innerHTML = `<span class="log-timestamp">[${new Date().toLocaleTimeString()}]</span><span class="log-level-error">微信重连请求失败: ${error}</span>`;
+                    logsElement.appendChild(logLine);
+                    scrollToBottom();
+                })
+                .finally(() => {
+                    // 恢复按钮状态和隐藏加载提示
+                    reconnectBtn.disabled = false;
+                    reconnectBtn.innerHTML = originalText;
+                    loadingStatus.classList.add('d-none');
                 });
         }
 
