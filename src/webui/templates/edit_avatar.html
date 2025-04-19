@@ -214,28 +214,6 @@
             border-bottom: 1px solid var(--card-border);
         }
 
-        /* 移除重复的导航栏相关样式修复 */
-        /*
-        .navbar .form-check.form-switch {
-            display: flex;
-            align-items: center;
-            height: 100%;
-            margin: 0;
-        }
-
-        .navbar .form-check-label {
-            display: flex;
-            align-items: center;
-            margin: 0 0 0 8px;
-            line-height: 1;
-        }
-
-        .navbar .form-check-input {
-            margin: 0;
-            vertical-align: middle;
-        }
-        */
-
         /* 添加深色模式下的模态框样式 */
         [data-bs-theme="dark"] .modal-content {
             background-color: #1a1f2e;
@@ -722,7 +700,7 @@
                                                 <div class="mb-3">
                                                     <label for="coreMemoryContent" class="form-label">核心记忆内容</label>
                                                     <div class="alert alert-info mb-2">
-                                                        <i class="bi bi-info-circle-fill"></i> 核心记忆是角色对用户的永久印象，会在每次对话中被使用。格式为JSON数组，请谨慎编辑，确保格式正确。 
+                                                        <i class="bi bi-info-circle-fill"></i> 核心记忆包含角色对用户的长期印象和关键信息，会在每次对话中被使用。您可以在这里编辑角色记住的重要内容。
                                                     </div>
                                                     <textarea class="form-control" id="coreMemoryContent" rows="8" 
                                                         style="min-height: 200px; max-height: 50vh; resize: vertical; overflow-y: auto;">${data.content || ''}</textarea>
@@ -834,6 +812,8 @@
                         .then(response => response.json())
                         .then(data => {
                             if (data.status === 'success') {
+                                const conversations = data.conversations || [];
+                                
                                 // 创建一个模态框来编辑短期记忆
                                 const modalHTML = `
                                 <div class="modal fade" id="shortMemoryModal" tabindex="-1" aria-labelledby="shortMemoryModalLabel" aria-hidden="true">
@@ -845,17 +825,32 @@
                                             </div>
                                             <div class="modal-body">
                                                 <div class="mb-3">
-                                                    <div class="alert alert-warning">
-                                                        <i class="bi bi-exclamation-triangle-fill"></i> 短期记忆包含最近的对话历史，格式为JSON数组。请谨慎编辑，确保格式正确。
+                                                    <div class="alert alert-info">
+                                                        <i class="bi bi-info-circle-fill"></i> 短期记忆包含最近的对话历史，可以逐条编辑、删除或添加对话。
                                                     </div>
-                                                    <textarea class="form-control" id="shortMemoryContent" rows="15" 
-                                                        style="min-height: 300px; max-height: 60vh; resize: vertical; overflow-y: auto; font-family: monospace;">${JSON.stringify(data.conversations || [], null, 2)}</textarea>
+                                                    
+                                                    <div class="d-flex justify-content-end mb-3">
+                                                        <button type="button" class="btn btn-sm btn-success me-2" id="addConversationBtn">
+                                                            <i class="bi bi-plus-circle"></i> 添加对话
+                                                        </button>
+                                                        <button type="button" class="btn btn-sm btn-danger" id="clearAllConversationsBtn">
+                                                            <i class="bi bi-trash"></i> 清空所有对话
+                                                        </button>
+                                                    </div>
+                                                    
+                                                    <div id="conversationsList" class="border rounded p-3" style="max-height: 60vh; overflow-y: auto;">
+                                                        <div id="noConversationsMsg" class="text-center p-3 text-muted" ${conversations.length > 0 ? 'style="display:none;"' : ''}>
+                                                            <i class="bi bi-chat-square-text"></i> 暂无对话记录
+                                                        </div>
+                                                        <div id="conversationsContainer">
+                                                            <!-- 对话内容由JavaScript动态生成 -->
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
                                             <div class="modal-footer">
                                                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                                                <button type="button" class="btn btn-danger" id="clearShortMemoryBtn">清空短期记忆</button>
-                                                <button type="button" class="btn btn-primary" id="saveShortMemoryBtn">保存</button>
+                                                <button type="button" class="btn btn-primary" id="saveShortMemoryBtn">保存所有修改</button>
                                             </div>
                                         </div>
                                     </div>
@@ -869,11 +864,147 @@
                                 const modal = new bootstrap.Modal(document.getElementById('shortMemoryModal'));
                                 modal.show();
                                 
-                                // 保存按钮点击事件
-                                document.getElementById('saveShortMemoryBtn').addEventListener('click', function() {
-                                    try {
-                                        const memoryContent = JSON.parse(document.getElementById('shortMemoryContent').value);
+                                // 保存所有修改
+                                let conversationsData = [...conversations]; // 复制一份数据用于编辑
+                                let editingIndex = -1; // 初始化编辑索引变量
+                                
+                                // 获取当前时间戳
+                                function getCurrentTimestamp() {
+                                    const now = new Date();
+                                    return now.toISOString().replace('T', ' ').substring(0, 19);
+                                }
+                                
+                                // 添加新对话
+                                document.getElementById('addConversationBtn').addEventListener('click', function() {
+                                    // 添加一个新的空对话
+                                    conversationsData.push({
+                                        timestamp: getCurrentTimestamp(),
+                                        user: '',
+                                        bot: ''
+                                    });
+                                    
+                                    // 更新UI
+                                    updateConversationsList();
+                                    
+                                    // 自动滚动到底部
+                                    const container = document.getElementById('conversationsList');
+                                    container.scrollTop = container.scrollHeight;
+                                });
+                                
+                                // 更新对话列表UI
+                                function updateConversationsList() {
+                                    const container = document.getElementById('conversationsContainer');
+                                    const noMsgElement = document.getElementById('noConversationsMsg');
+                                    
+                                    // 如果没有对话，显示提示信息
+                                    if (conversationsData.length === 0) {
+                                        noMsgElement.style.display = 'block';
+                                        container.innerHTML = '';
+                                        return;
+                                    }
+                                    
+                                    // 否则隐藏提示，显示对话列表
+                                    noMsgElement.style.display = 'none';
+                                    
+                                    // 更新列表内容
+                                    container.innerHTML = conversationsData.map((conv, index) => {
+                                        // 提取用户消息中的时间戳和实际内容
+                                        let userTimePrefix = '';
+                                        let userContent = conv.user || '';
                                         
+                                        // 尝试匹配时间戳模式 [YYYY-MM-DD HH:MM:SS]
+                                        const timeRegex = /^\s*\[(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\]\s*/;
+                                        const match = userContent.match(timeRegex);
+                                        if (match) {
+                                            userTimePrefix = match[0];
+                                            userContent = userContent.substring(match[0].length);
+                                        }
+                                        
+                                        return `
+                                        <div class="card mb-3 conversation-card" data-index="${index}">
+                                            <div class="card-header d-flex justify-content-between align-items-center">
+                                                <small class="text-muted">${conv.timestamp || '未知时间'}</small>
+                                                <div>
+                                                    <button type="button" class="btn btn-sm btn-outline-danger delete-btn" data-index="${index}">
+                                                        <i class="bi bi-trash"></i> 删除
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div class="card-body">
+                                                <div>
+                                                    <div class="mb-3">
+                                                        <label class="form-label fw-bold">用户消息</label>
+                                                        ${userTimePrefix ? `<div class="text-muted mb-1 small">${userTimePrefix}</div>` : ''}
+                                                        <textarea class="form-control user-message-input" rows="2" data-index="${index}" data-time-prefix="${userTimePrefix.replace(/"/g, '&quot;')}">${userContent}</textarea>
+                                                    </div>
+                                                    <div class="mb-2">
+                                                        <label class="form-label fw-bold">系统回复</label>
+                                                        <textarea class="form-control bot-message-input" rows="2" data-index="${index}">${conv.bot || ''}</textarea>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `}).join('');
+                                    
+                                    // 绑定文本区域的自动保存事件
+                                    document.querySelectorAll('.user-message-input').forEach(textarea => {
+                                        textarea.addEventListener('change', function() {
+                                            const index = parseInt(this.getAttribute('data-index'));
+                                            const timePrefix = this.getAttribute('data-time-prefix') || '';
+                                            // 保存时重新组合时间戳前缀和用户编辑的内容
+                                            conversationsData[index].user = timePrefix + this.value;
+                                        });
+                                        
+                                        // 自动调整高度
+                                        textarea.addEventListener('input', function() {
+                                            this.style.height = 'auto';
+                                            this.style.height = (this.scrollHeight) + 'px';
+                                        });
+                                        
+                                        // 初始调整高度
+                                        textarea.style.height = 'auto';
+                                        textarea.style.height = (textarea.scrollHeight) + 'px';
+                                    });
+                                    
+                                    document.querySelectorAll('.bot-message-input').forEach(textarea => {
+                                        textarea.addEventListener('change', function() {
+                                            const index = parseInt(this.getAttribute('data-index'));
+                                            conversationsData[index].bot = this.value;
+                                        });
+                                        
+                                        // 自动调整高度
+                                        textarea.addEventListener('input', function() {
+                                            this.style.height = 'auto';
+                                            this.style.height = (this.scrollHeight) + 'px';
+                                        });
+                                        
+                                        // 初始调整高度
+                                        textarea.style.height = 'auto';
+                                        textarea.style.height = (textarea.scrollHeight) + 'px';
+                                    });
+                                    
+                                    // 删除按钮事件
+                                    document.querySelectorAll('.delete-btn').forEach(btn => {
+                                        btn.addEventListener('click', function() {
+                                            const index = parseInt(this.getAttribute('data-index'));
+                                            if (confirm('确定要删除这条对话吗？')) {
+                                                conversationsData.splice(index, 1);
+                                                updateConversationsList();
+                                            }
+                                        });
+                                    });
+                                }
+                                
+                                // 清空所有对话
+                                document.getElementById('clearAllConversationsBtn').addEventListener('click', function() {
+                                    if (confirm('确定要清空所有对话吗？此操作无法撤销！')) {
+                                        conversationsData = [];
+                                        updateConversationsList();
+                                    }
+                                });
+                                
+                                // 保存所有修改
+                                document.getElementById('saveShortMemoryBtn').addEventListener('click', function() {
                                         // 保存短期记忆
                                         fetch('/save_short_memory', {
                                             method: 'POST',
@@ -882,8 +1013,8 @@
                                             },
                                             body: JSON.stringify({
                                                 avatar: currentAvatar,
-                                                user_id: currentUser,
-                                                conversations: memoryContent
+                                            user_id: currentUser,
+                                            conversations: conversationsData
                                             })
                                         })
                                         .then(response => response.json())
@@ -901,43 +1032,16 @@
                                         .catch(error => {
                                             showToast('保存失败: ' + error, 'error');
                                         });
-                                    } catch (e) {
-                                        showToast('JSON格式错误: ' + e.message, 'error');
-                                    }
                                 });
                                 
-                                // 清空短期记忆按钮点击事件
-                                document.getElementById('clearShortMemoryBtn').addEventListener('click', function() {
-                                    if (confirm('确定要清空短期记忆吗？此操作无法撤销！')) {
-                                        fetch('/clear_short_memory', {
-                                            method: 'POST',
-                                            headers: {
-                                                'Content-Type': 'application/json',
-                                            },
-                                            body: JSON.stringify({
-                                                avatar: currentAvatar,
-                                                user_id: currentUser
-                                            })
-                                        })
-                                        .then(response => response.json())
-                                        .then(data => {
-                                            if (data.status === 'success') {
-                                                showToast('短期记忆已清空', 'success');
-                                                document.getElementById('shortMemoryContent').value = '[]';
-                                            } else {
-                                                showToast('清空失败: ' + data.message, 'error');
-                                            }
-                                        })
-                                        .catch(error => {
-                                            showToast('清空失败: ' + error, 'error');
-                                        });
-                                    }
-                                });
-                                
-                                // 模态框关闭事件
+                                // 模态框关闭事件 - 清理DOM
                                 document.getElementById('shortMemoryModal').addEventListener('hidden.bs.modal', function() {
                                     this.remove();
                                 });
+                                
+                                // 初始化显示对话列表
+                                updateConversationsList();
+                                
                             } else {
                                 showToast('加载短期记忆失败: ' + data.message, 'error');
                             }
@@ -1100,9 +1204,9 @@
                 
                 // 确认删除人设按钮点击事件
                 document.getElementById('confirmDeleteBtn').addEventListener('click', deleteCurrentAvatar);
-                
-                // 获取人设按钮点击事件
-                document.getElementById('getAvatarBtn').addEventListener('click', function() {
+
+            // 获取人设按钮点击事件
+            document.getElementById('getAvatarBtn').addEventListener('click', function() {
                     new bootstrap.Modal(document.getElementById('getAvatarModal')).show();
                 });
                 
