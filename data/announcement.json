@@ -1,5 +1,0 @@
-{
-    "enabled": true,
-    "title": "欢迎使用 KouriChat",
-    "content": "\n                <div class=\"p-3\">\n                    <h4 class=\"mb-3\">🌟 欢迎使用 KouriChat 系统</h4>\n                    <p>这是一个基于DeepSeek的AI情感陪伴系统，您可以配置并与AI进行沉浸式对话。</p>\n                    <p>初次使用请按以下步骤进行配置：</p>\n                    <ol>\n                        <li>在<strong>配置中心</strong>中设置AI模型API</li>\n                        <li>在<strong>角色设定</strong>中选择或创建角色</li>\n                        <li>点击<strong>启动</strong>按钮启动系统</li>\n                    </ol>\n                    <div class=\"mt-4 pt-3 border-top\">\n                        <small class=\"text-muted\">如需帮助，请加入QQ群：715616260 获取支持</small>\n                    </div>\n                </div>\n                "
-}

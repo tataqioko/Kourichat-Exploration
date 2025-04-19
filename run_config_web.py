@@ -1341,11 +1341,19 @@ def create_job_object():
                 job_object, win32job.JobObjectExtendedLimitInformation, info
             )
             
-            # 将当前进程添加到作业对象
-            current_process = win32process.GetCurrentProcess()
-            win32job.AssignProcessToJobObject(job_object, current_process)
+            try:
+                # 将当前进程添加到作业对象
+                current_process = win32process.GetCurrentProcess()
+                win32job.AssignProcessToJobObject(job_object, current_process)
+                logger.info("已创建作业对象并将当前进程添加到作业中")
+            except Exception as assign_error:
+                if hasattr(assign_error, 'winerror') and assign_error.winerror == 5:  # 5是"拒绝访问"错误代码
+                    logger.warning("无法将当前进程添加到作业对象（权限不足），但这不影响程序运行")
+                    # 作业对象仍然可用于管理子进程
+                    return True
+                else:
+                    raise  # 重新抛出其他类型的错误
             
-            logger.info("已创建作业对象并将当前进程添加到作业中")
             return True
     except Exception as e:
         logger.error(f"创建作业对象失败: {str(e)}")
@@ -2178,38 +2186,57 @@ def get_all_configs():
 @app.route('/get_announcement')
 def get_announcement():
     try:
-        data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
-        announcement_file = os.path.join(data_path, 'announcement.json')
+        # 使用全局定义的模板文件路径
+        announcement_file = ANNOUNCEMENT_CONFIG_PATH
         
+        # 公告文件不存在时，直接返回一个空公告，不创建文件
         if not os.path.exists(announcement_file):
-            # 创建默认公告
-            default_announcement = {
-                'enabled': True,
-                'title': '欢迎使用 KouriChat',
-                'content': """
-                <div class="p-3">
-                    <h4 class="mb-3">🌟 欢迎使用 KouriChat 系统</h4>
-                    <p>这是一个基于DeepSeek的AI情感陪伴系统，您可以配置并与AI进行沉浸式对话。</p>
-                    <p>初次使用请按以下步骤进行配置：</p>
-                    <ol>
-                        <li>在<strong>配置中心</strong>中设置AI模型API</li>
-                        <li>在<strong>角色设定</strong>中选择或创建角色</li>
-                        <li>点击<strong>启动</strong>按钮启动系统</li>
-                    </ol>
-                    <div class="mt-4 pt-3 border-top">
-                        <small class="text-muted">如需帮助，请加入QQ群：715616260 获取支持</small>
-                    </div>
-                </div>
-                """
-            }
-            with open(announcement_file, 'w', encoding='utf-8') as f:
-                json.dump(default_announcement, f, ensure_ascii=False, indent=4)
-                
-            return jsonify(default_announcement)
+            return jsonify({
+                'enabled': False,
+                'title': '系统公告',
+                'content': ''
+            })
         
         # 读取公告文件
         with open(announcement_file, 'r', encoding='utf-8') as f:
             announcement = json.load(f)
+        
+        # 读取version.json文件内容并添加到公告中
+        version_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'version.json')
+        if os.path.exists(version_file):
+            try:
+                with open(version_file, 'r', encoding='utf-8') as f:
+                    version_info = json.load(f)
+                
+                # 获取版本信息
+                version = version_info.get('version', '未知')
+                last_update = version_info.get('last_update', '未知')
+                description = version_info.get('description', [])
+                
+                # 将版本信息添加到公告内容中
+                version_html = f"""
+                <div class="mt-4 pt-3 border-top">
+                    <h5 class="mb-3">当前版本信息</h5>
+                    <p><strong>版本号:</strong> {version}</p>
+                    <p><strong>更新日期:</strong> {last_update}</p>
+                    <p><strong>更新内容:</strong></p>
+                """
+                
+                if isinstance(description, list):
+                    version_html += "<ul class='ps-3'>"
+                    for item in description:
+                        version_html += f"<li>{item}</li>"
+                    version_html += "</ul>"
+                else:
+                    version_html += f"<p>{description}</p>"
+                
+                version_html += "</div>"
+                
+                # 将版本信息附加到原有公告内容
+                # 简单地附加版本信息，无论是HTML还是纯文本
+                announcement['content'] += version_html
+            except Exception as e:
+                print(f"获取版本信息时发生错误: {e}")
             
         return jsonify(announcement)
     except Exception as e:
