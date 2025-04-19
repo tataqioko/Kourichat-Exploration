@@ -172,7 +172,8 @@ def parse_config_groups() -> Dict[str, Dict[str, Any]]:
         config_groups = {
             "基础配置": {},
             "图像识别API配置": {},
-            "时间配置": {},
+            "主动消息配置": {},
+            "消息配置": {},
             "Prompt配置": {},
         }
 
@@ -235,8 +236,8 @@ def parse_config_groups() -> Dict[str, Dict[str, Any]]:
             }
         )
 
-        # 时间配置
-        config_groups["时间配置"].update(
+        # 主动消息配置
+        config_groups["主动消息配置"].update(
             {
                 "AUTO_MESSAGE": {
                     "value": config.behavior.auto_message.content,
@@ -258,6 +259,19 @@ def parse_config_groups() -> Dict[str, Dict[str, Any]]:
                     "value": config.behavior.quiet_time.end,
                     "description": "安静时间结束",
                 },
+            }
+        )
+        
+        # 消息配置
+        config_groups["消息配置"].update(
+            {
+                "QUEUE_TIMEOUT": {
+                    "value": config.behavior.message_queue.timeout,
+                    "description": "消息队列等待时间（秒）",
+                    "type": "number",
+                    "min": 8,
+                    "max": 20
+                }
             }
         )
 
@@ -410,7 +424,8 @@ def save_config():
             elif key in ['LISTEN_LIST', 'DEEPSEEK_BASE_URL', 'MODEL', 'DEEPSEEK_API_KEY', 'MAX_TOKEN', 'TEMPERATURE',
                        'VISION_API_KEY', 'VISION_BASE_URL', 'VISION_TEMPERATURE', 'VISION_MODEL',
                        'IMAGE_MODEL', 'TEMP_IMAGE_DIR', 'AUTO_MESSAGE', 'MIN_COUNTDOWN_HOURS', 'MAX_COUNTDOWN_HOURS',
-                       'QUIET_TIME_START', 'QUIET_TIME_END', 'TTS_API_URL', 'VOICE_DIR', 'MAX_GROUPS', 'AVATAR_DIR']:
+                       'QUIET_TIME_START', 'QUIET_TIME_END', 'TTS_API_URL', 'VOICE_DIR', 'MAX_GROUPS', 'AVATAR_DIR',
+                       'QUEUE_TIMEOUT']:
                 update_config_value(current_config, key, value)
             else:
                 logger.warning(f"未知的配置项: {key}")
@@ -467,6 +482,7 @@ def update_config_value(config_data, key, value):
             'MAX_COUNTDOWN_HOURS': ['categories', 'behavior_settings', 'settings', 'auto_message', 'countdown', 'max_hours', 'value'],
             'QUIET_TIME_START': ['categories', 'behavior_settings', 'settings', 'quiet_time', 'start', 'value'],
             'QUIET_TIME_END': ['categories', 'behavior_settings', 'settings', 'quiet_time', 'end', 'value'],
+            'QUEUE_TIMEOUT': ['categories', 'behavior_settings', 'settings', 'message_queue', 'timeout', 'value'],
             'MAX_GROUPS': ['categories', 'behavior_settings', 'settings', 'context', 'max_groups', 'value'],
             'AVATAR_DIR': ['categories', 'behavior_settings', 'settings', 'context', 'avatar_dir', 'value'],
         }
@@ -507,12 +523,13 @@ def update_config_value(config_data, key, value):
             
             # 设置最终值，确保类型正确
             if isinstance(value, str) and key in ['MAX_TOKEN', 'TEMPERATURE', 'VISION_TEMPERATURE', 
-                                               'MIN_COUNTDOWN_HOURS', 'MAX_COUNTDOWN_HOURS', 'MAX_GROUPS']:
+                                               'MIN_COUNTDOWN_HOURS', 'MAX_COUNTDOWN_HOURS', 'MAX_GROUPS',
+                                               'QUEUE_TIMEOUT']:
                 try:
                     # 尝试转换为数字
                     value = float(value)
                     # 对于整数类型配置，转为整数
-                    if key in ['MAX_TOKEN', 'MAX_GROUPS']:
+                    if key in ['MAX_TOKEN', 'MAX_GROUPS', 'QUEUE_TIMEOUT']:
                         value = int(value)
                 except ValueError:
                     pass
@@ -2135,24 +2152,31 @@ def get_all_configs():
             if 'behavior_settings' in config_data['categories'] and 'settings' in config_data['categories']['behavior_settings']:
                 behavior = config_data['categories']['behavior_settings']['settings']
                 
-                # 时间配置
-                configs['时间配置'] = {}
+                # 主动消息配置
+                configs['主动消息配置'] = {}
                 if 'auto_message' in behavior:
                     auto_msg = behavior['auto_message']
                     if 'content' in auto_msg:
-                        configs['时间配置']['AUTO_MESSAGE'] = auto_msg['content']
+                        configs['主动消息配置']['AUTO_MESSAGE'] = auto_msg['content']
                     if 'countdown' in auto_msg:
                         if 'min_hours' in auto_msg['countdown']:
-                            configs['时间配置']['MIN_COUNTDOWN_HOURS'] = auto_msg['countdown']['min_hours']
+                            configs['主动消息配置']['MIN_COUNTDOWN_HOURS'] = auto_msg['countdown']['min_hours']
                         if 'max_hours' in auto_msg['countdown']:
-                            configs['时间配置']['MAX_COUNTDOWN_HOURS'] = auto_msg['countdown']['max_hours']
+                            configs['主动消息配置']['MAX_COUNTDOWN_HOURS'] = auto_msg['countdown']['max_hours']
                 
                 if 'quiet_time' in behavior:
                     quiet = behavior['quiet_time']
                     if 'start' in quiet:
-                        configs['时间配置']['QUIET_TIME_START'] = quiet['start']
+                        configs['主动消息配置']['QUIET_TIME_START'] = quiet['start']
                     if 'end' in quiet:
-                        configs['时间配置']['QUIET_TIME_END'] = quiet['end']
+                        configs['主动消息配置']['QUIET_TIME_END'] = quiet['end']
+                
+                # 消息队列配置
+                configs['消息配置'] = {}
+                if 'message_queue' in behavior:
+                    msg_queue = behavior['message_queue']
+                    if 'timeout' in msg_queue:
+                        configs['消息配置']['QUEUE_TIMEOUT'] = msg_queue['timeout']
                 
                 # Prompt配置
                 configs['Prompt配置'] = {}

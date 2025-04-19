@@ -59,6 +59,10 @@ class ContextSettings:
     avatar_dir: str  # 人设目录路径，prompt文件和表情包目录都将基于此路径
 
 @dataclass
+class MessageQueueSettings:
+    timeout: int
+
+@dataclass
 class TaskSettings:
     task_id: str
     chat_id: str
@@ -77,6 +81,7 @@ class BehaviorSettings:
     quiet_time: QuietTimeSettings
     context: ContextSettings
     schedule_settings: ScheduleSettings
+    message_queue: MessageQueueSettings
 
 @dataclass
 class AuthSettings:
@@ -201,6 +206,10 @@ class Config:
                 quiet_time_data = behavior_data['quiet_time']
                 context_data = behavior_data['context']
                 
+                # 消息队列设置
+                message_queue_data = behavior_data.get('message_queue', {})
+                message_queue_timeout = message_queue_data.get('timeout', {}).get('value', 8)
+                
                 # 确保目录路径规范化
                 avatar_dir = context_data['avatar_dir'].get('value', '')
                 if not avatar_dir.startswith('data/avatars/'):
@@ -241,6 +250,9 @@ class Config:
                     ),
                     schedule_settings=ScheduleSettings(
                         tasks=schedule_tasks
+                    ),
+                    message_queue=MessageQueueSettings(
+                        timeout=int(message_queue_timeout)
                     )
                 )
                 

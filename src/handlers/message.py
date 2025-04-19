@@ -54,7 +54,7 @@ class MessageHandler:
         # 消息队列相关
         self.message_queues = {}  # 存储每个用户的消息队列，格式：{queue_key: queue_data}
         self.queue_timers = {}    # 存储每个用户的定时器，格式：{queue_key: timer}
-        self.QUEUE_TIMEOUT = 8    # 队列等待时间（秒）
+        self.QUEUE_TIMEOUT = config.behavior.message_queue.timeout  # 从配置中获取队列等待时间（秒）
         self.queue_lock = threading.Lock()
         self.chat_contexts = {}
         

@@ -127,6 +127,15 @@
                         }
                     }
                 },
+                "message_queue": {
+                    "timeout": {
+                        "value": 8,
+                        "type": "number",
+                        "description": "消息队列等待时间（秒）",
+                        "min": 8,
+                        "max": 20
+                    }
+                },
                 "quiet_time": {
                     "start": {
                         "value": "22:00",
@@ -161,6 +170,16 @@
                     "type": "string", 
                     "description": "管理员密码",
                     "is_secret": true
+                }
+            }
+        },
+        "schedule_settings": {
+            "title": "定时任务配置",
+            "settings": {
+                "tasks": {
+                    "value": [],
+                    "type": "array",
+                    "description": "定时任务列表"
                 }
             }
         }

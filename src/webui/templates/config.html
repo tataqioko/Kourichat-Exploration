@@ -1483,12 +1483,75 @@
             }
         });
     </script>
+{% elif config.type == 'number' and config.min is defined and config.max is defined %}
+    <div class="mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <span>当前值: <strong id="{{ key }}_display">{{ config.value }}</strong></span>
+        </div>
+        <input type="range" id="{{ key }}_slider"
+            class="form-range"
+            min="{{ config.min }}"
+            max="{{ config.max }}"
+            step="{{ config.step|default(1) }}"
+            value="{{ config.value }}"
+            oninput="updateRangeValue('{{ key }}', this.value)">
+        <div class="d-flex justify-content-between mt-1">
+            <span class="small text-muted">{{ config.min }}</span>
+            <span class="small text-muted">{{ config.max }}</span>
+        </div>
+        <input type="hidden" 
+            id="{{ key }}" 
+            name="{{ key }}" 
+            value="{{ config.value }}">
+        {% if key == 'QUEUE_TIMEOUT' %}
+        <div class="mt-2 small text-muted">
+            <i class="bi bi-info-circle me-1"></i>如果在短时间内喜欢多段发送内容，或者打字速度较慢，建议可以设置更大数值
+        </div>
+        {% endif %}
+    </div>
+
+    <script>
+        // 确保页面加载时初始化滑块值
+        document.addEventListener('DOMContentLoaded', function() {
+            const slider = document.getElementById('{{ key }}_slider');
+            if (slider) {
+                updateRangeValue('{{ key }}', slider.value);
+            }
+        });
+    </script>
 {% else %}
     <input type="text" class="form-control" 
         id="{{ key }}" name="{{ key }}" 
         value="{{ config.value }}">
 {% endif %}
     {% endmacro %}
+    
+    <!-- 添加全局脚本处理滑块控件 -->
+    <script>
+        // 更新数值滑块的值
+        function updateRangeValue(key, value) {
+            const display = document.getElementById(`${key}_display`);
+            const input = document.getElementById(key);
+            if (display) {
+                display.textContent = value;
+            }
+            if (input) {
+                input.value = value;
+            }
+        }
+        
+        // 更新温度滑块的值
+        function updateTemperature(key, value) {
+            const display = document.getElementById(`${key}_display`);
+            const input = document.getElementById(key);
+            if (display) {
+                display.textContent = value;
+            }
+            if (input) {
+                input.value = value;
+            }
+        }
+    </script>
 </head>
 <body>
     {% include 'navbar.html' %}
