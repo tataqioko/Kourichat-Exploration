@@ -41,52 +41,16 @@ class MemoryService:
             
             # 初始化核心记忆文件（如果不存在）
             if not os.path.exists(core_memory_path):
-                # 修改为数组格式
-                initial_core_data = [{
+                initial_core_data = {
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "content": ""  # 初始为空字符串
-                }]
+                }
                 with open(core_memory_path, "w", encoding="utf-8") as f:
                     json.dump(initial_core_data, f, ensure_ascii=False, indent=2)
                 logger.info(f"创建核心记忆文件: {core_memory_path}")
-            else:
-                # 如果文件已存在，检查是否需要迁移格式
-                self._migrate_core_memory_format(core_memory_path)
         
         except Exception as e:
             logger.error(f"初始化记忆文件失败: {str(e)}")
-
-    def _migrate_core_memory_format(self, core_memory_path: str):
-        """迁移核心记忆格式从对象到数组"""
-        try:
-            with open(core_memory_path, "r", encoding="utf-8") as f:
-                try:
-                    core_data = json.load(f)
-                    
-                    # 检查是否已经是数组格式
-                    if isinstance(core_data, list):
-                        logger.debug(f"核心记忆已经是数组格式: {core_memory_path}")
-                        return
-                    
-                    # 如果是对象格式，转换为数组格式
-                    if isinstance(core_data, dict):
-                        logger.info(f"迁移核心记忆格式: {core_memory_path}")
-                        new_core_data = [core_data]
-                        
-                        # 写回文件
-                        with open(core_memory_path, "w", encoding="utf-8") as f_write:
-                            json.dump(new_core_data, f_write, ensure_ascii=False, indent=2)
-                        logger.info(f"核心记忆格式迁移成功: {core_memory_path}")
-                except json.JSONDecodeError:
-                    logger.error(f"核心记忆文件损坏，将重新创建: {core_memory_path}")
-                    initial_core_data = [{
-                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "content": ""
-                    }]
-                    with open(core_memory_path, "w", encoding="utf-8") as f_write:
-                        json.dump(initial_core_data, f_write, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logger.error(f"迁移核心记忆格式失败: {str(e)}")
 
     def _get_llm_client(self):
         """获取或创建LLM客户端"""
@@ -210,18 +174,10 @@ class MemoryService:
             if os.path.exists(core_memory_path):
                 try:
                     with open(core_memory_path, "r", encoding="utf-8") as f:
-                        core_data_list = json.load(f)
-                        # 检查是否是数组格式
-                        if isinstance(core_data_list, list) and len(core_data_list) > 0:
-                            core_memory = core_data_list[0].get("content", "")
-                        else:
-                            # 尝试兼容旧格式
-                            if isinstance(core_data_list, dict):
-                                core_memory = core_data_list.get("content", "")
-                                # 自动迁移格式
-                                self._migrate_core_memory_format(core_memory_path)
-                except (json.JSONDecodeError, KeyError) as e:
-                    logger.warning(f"核心记忆文件损坏或格式错误，将重新生成: {core_memory_path}, 错误: {str(e)}")
+                        core_data = json.load(f)
+                        core_memory = core_data.get("content", "")
+                except (json.JSONDecodeError, KeyError):
+                    logger.warning(f"核心记忆文件损坏或格式错误，将重新生成: {core_memory_path}")
             
             # 构建最近对话内容（适配新的记忆格式）
             recent_conversations = "\n".join([
@@ -262,11 +218,11 @@ class MemoryService:
                 system_prompt="你是一个专注于信息提炼的AI助手。你的任务是从对话中提取最关键的信息，并创建一个极其精简的摘要。"
             )
             
-            # 保存新的核心记忆 - 修改为数组格式
-            core_data = [{
+            # 保存新的核心记忆
+            core_data = {
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "content": new_core_memory
-            }]
+            }
             
             with open(core_memory_path, "w", encoding="utf-8") as f:
                 json.dump(core_data, f, ensure_ascii=False, indent=2)
@@ -289,25 +245,10 @@ class MemoryService:
             logger.debug(f"核心记忆路径: {core_memory_path}")
             
             with open(core_memory_path, "r", encoding="utf-8") as f:
-                try:
-                    core_data_list = json.load(f)
-                    
-                    # 处理数组格式
-                    if isinstance(core_data_list, list) and len(core_data_list) > 0:
-                        core_memory = core_data_list[0].get("content", "")
-                    elif isinstance(core_data_list, dict):
-                        # 尝试兼容旧格式
-                        core_memory = core_data_list.get("content", "")
-                        # 自动迁移格式
-                        self._migrate_core_memory_format(core_memory_path)
-                    else:
-                        core_memory = ""
-                        
-                    logger.debug(f"核心记忆长度: {len(core_memory)} 字节")
-                    return core_memory
-                except json.JSONDecodeError:
-                    logger.error(f"核心记忆文件损坏: {core_memory_path}")
-                    return ""
+                core_data = json.load(f)
+                core_memory = core_data.get("content", "")
+                logger.debug(f"核心记忆长度: {len(core_memory)} 字节")
+                return core_memory
                 
         except Exception as e:
             logger.info(f"获取核心记忆失败: {str(e)}")
