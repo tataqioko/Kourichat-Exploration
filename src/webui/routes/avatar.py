@@ -240,27 +240,53 @@ def load_core_memory():
     """加载角色的核心记忆内容"""
     try:
         avatar_name = request.args.get('avatar')
+        user_id = request.args.get('user_id', 'default')  # 添加用户ID参数，默认为default
+        
         if not avatar_name:
             return jsonify({'status': 'error', 'message': '未提供角色名称'})
             
-        memory_path = AVATARS_DIR / avatar_name / 'memory' / 'core_memory.json'
+        # 修改为用户特定的记忆路径
+        memory_path = AVATARS_DIR / avatar_name / 'memory' / user_id / 'core_memory.json'
         
-        # 如果记忆文件不存在，则返回空内容
+        # 如果记忆文件不存在，则创建目录结构
         if not memory_path.exists():
             # 创建记忆目录
-            memory_dir = AVATARS_DIR / avatar_name / 'memory'
-            memory_dir.mkdir(exist_ok=True)
+            memory_dir = AVATARS_DIR / avatar_name / 'memory' / user_id
+            memory_dir.mkdir(parents=True, exist_ok=True)
             
-            # 创建空的核心记忆文件
+            # 创建空的核心记忆文件 - 使用新的数组格式
+            initial_core_data = [{
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "content": ""  # 初始为空字符串
+            }]
             with open(memory_path, 'w', encoding='utf-8') as f:
-                json.dump({"timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "content": ""}, f, ensure_ascii=False, indent=2)
+                json.dump(initial_core_data, f, ensure_ascii=False, indent=2)
             
             return jsonify({'status': 'success', 'content': ''})
             
         # 读取核心记忆文件
         with open(memory_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
-            content = data.get('content', '')
+            # 处理数组格式
+            if isinstance(data, list) and len(data) > 0:
+                content = data[0].get("content", "")
+            else:
+                # 兼容旧格式
+                content = data.get('content', '')
+                
+                # 将旧格式迁移为新格式
+                if memory_path.exists():
+                    try:
+                        # 将旧格式转换为新的数组格式
+                        new_data = [{
+                            "timestamp": data.get("timestamp", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                            "content": content
+                        }]
+                        # 保存为新格式
+                        with open(memory_path, 'w', encoding='utf-8') as f_write:
+                            json.dump(new_data, f_write, ensure_ascii=False, indent=2)
+                    except Exception as e:
+                        print(f"迁移核心记忆格式失败: {str(e)}")
             
         return jsonify({'status': 'success', 'content': content})
     except Exception as e:
@@ -272,22 +298,23 @@ def save_core_memory():
     try:
         data = request.get_json()
         avatar_name = data.get('avatar')
+        user_id = data.get('user_id', 'default')  # 添加用户ID参数，默认为default
         content = data.get('content', '')
         
         if not avatar_name:
             return jsonify({'status': 'error', 'message': '未提供角色名称'})
             
         # 确保记忆目录存在
-        memory_dir = AVATARS_DIR / avatar_name / 'memory'
-        memory_dir.mkdir(exist_ok=True)
+        memory_dir = AVATARS_DIR / avatar_name / 'memory' / user_id
+        memory_dir.mkdir(parents=True, exist_ok=True)
         
         memory_path = memory_dir / 'core_memory.json'
         
-        # 保存核心记忆
-        memory_data = {
+        # 保存核心记忆（使用数组格式）
+        memory_data = [{
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "content": content
-        }
+        }]
         
         with open(memory_path, 'w', encoding='utf-8') as f:
             json.dump(memory_data, f, ensure_ascii=False, indent=2)
@@ -301,16 +328,18 @@ def load_short_memory():
     """加载角色的短期记忆内容"""
     try:
         avatar_name = request.args.get('avatar')
+        user_id = request.args.get('user_id', 'default')  # 添加用户ID参数，默认为default
+        
         if not avatar_name:
             return jsonify({'status': 'error', 'message': '未提供角色名称'})
             
-        memory_path = AVATARS_DIR / avatar_name / 'memory' / 'short_memory.json'
+        memory_path = AVATARS_DIR / avatar_name / 'memory' / user_id / 'short_memory.json'
         
         # 如果记忆文件不存在，则返回空内容
         if not memory_path.exists():
             # 创建记忆目录
-            memory_dir = AVATARS_DIR / avatar_name / 'memory'
-            memory_dir.mkdir(exist_ok=True)
+            memory_dir = AVATARS_DIR / avatar_name / 'memory' / user_id
+            memory_dir.mkdir(parents=True, exist_ok=True)
             
             # 创建空的短期记忆文件
             with open(memory_path, 'w', encoding='utf-8') as f:
@@ -332,14 +361,15 @@ def save_short_memory():
     try:
         data = request.get_json()
         avatar_name = data.get('avatar')
+        user_id = data.get('user_id', 'default')  # 添加用户ID参数，默认为default
         conversations = data.get('conversations', [])
         
         if not avatar_name:
             return jsonify({'status': 'error', 'message': '未提供角色名称'})
             
         # 确保记忆目录存在
-        memory_dir = AVATARS_DIR / avatar_name / 'memory'
-        memory_dir.mkdir(exist_ok=True)
+        memory_dir = AVATARS_DIR / avatar_name / 'memory' / user_id
+        memory_dir.mkdir(parents=True, exist_ok=True)
         
         memory_path = memory_dir / 'short_memory.json'
         
@@ -357,13 +387,14 @@ def clear_short_memory():
     try:
         data = request.get_json()
         avatar_name = data.get('avatar')
+        user_id = data.get('user_id', 'default')  # 添加用户ID参数，默认为default
         
         if not avatar_name:
             return jsonify({'status': 'error', 'message': '未提供角色名称'})
             
         # 确保记忆目录存在
-        memory_dir = AVATARS_DIR / avatar_name / 'memory'
-        memory_dir.mkdir(exist_ok=True)
+        memory_dir = AVATARS_DIR / avatar_name / 'memory' / user_id
+        memory_dir.mkdir(parents=True, exist_ok=True)
         
         memory_path = memory_dir / 'short_memory.json'
         
@@ -382,25 +413,54 @@ def clear_core_memory():
     try:
         data = request.get_json()
         avatar_name = data.get('avatar')
+        user_id = data.get('user_id', 'default')  # 添加用户ID参数，默认为default
         
         if not avatar_name:
             return jsonify({'status': 'error', 'message': '未提供角色名称'})
             
         # 确保记忆目录存在
-        memory_dir = AVATARS_DIR / avatar_name / 'memory'
-        memory_dir.mkdir(exist_ok=True)
+        memory_dir = AVATARS_DIR / avatar_name / 'memory' / user_id
+        memory_dir.mkdir(parents=True, exist_ok=True)
         
         memory_path = memory_dir / 'core_memory.json'
         
-        # 清空核心记忆，但保留文件结构
-        memory_data = {
+        # 清空核心记忆，但保留文件结构（使用数组格式）
+        memory_data = [{
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "content": ""
-        }
+        }]
         
         with open(memory_path, 'w', encoding='utf-8') as f:
             json.dump(memory_data, f, ensure_ascii=False, indent=2)
             
         return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@avatar_bp.route('/get_avatar_users')
+def get_avatar_users():
+    """获取指定角色的所有用户目录"""
+    try:
+        avatar_name = request.args.get('avatar')
+        if not avatar_name:
+            return jsonify({'status': 'error', 'message': '未提供角色名称'})
+            
+        # 检查该角色的记忆目录
+        memory_dir = AVATARS_DIR / avatar_name / 'memory'
+        if not memory_dir.exists():
+            memory_dir.mkdir(exist_ok=True)
+            return jsonify({'status': 'success', 'users': []})
+            
+        # 获取所有用户目录
+        users = [d.name for d in memory_dir.iterdir() if d.is_dir()]
+        
+        # 如果没有用户，添加一个默认用户
+        if not users:
+            users = ['default']
+            # 创建默认用户目录
+            default_dir = memory_dir / 'default'
+            default_dir.mkdir(exist_ok=True)
+            
+        return jsonify({'status': 'success', 'users': users})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}) 

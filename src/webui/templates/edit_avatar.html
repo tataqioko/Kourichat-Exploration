@@ -277,6 +277,28 @@
         <div class="glass-panel mb-4">
             <h2>角色设定</h2>
             
+            <!-- 添加用户选择器 -->
+            <div class="alert alert-info mb-3">
+                <div class="d-flex align-items-center flex-wrap">
+                    <div class="me-3 mb-2">
+                        <i class="bi bi-person-circle me-2"></i>选择用户：
+                    </div>
+                    <div class="me-auto mb-2">
+                        <select id="userSelector" class="form-select form-select-sm">
+                            <!-- 这里的选项将通过JavaScript动态加载 -->
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="refreshUsersBtn" title="刷新用户列表">
+                            <i class="bi bi-arrow-clockwise"></i> 刷新用户列表
+                        </button>
+                    </div>
+                </div>
+                <div class="small mt-1">
+                    <i class="bi bi-info-circle me-1"></i>请选择要编辑记忆的特定用户。每个用户有独立的记忆存储。
+                </div>
+            </div>
+            
             <!-- 添加获取人设按钮 -->
             <div class="d-flex justify-content-end mb-3">
                 <button type="button" class="btn btn-lg btn-info" id="getAvatarBtn" title="获取人设">
@@ -415,6 +437,8 @@
         document.addEventListener('DOMContentLoaded', function() {
             // 当前选中的人设目录
             let currentAvatar = 'MONO';
+            // 当前选中的用户ID
+            let currentUser = 'default';
             let rawContent = ''; // 存储原始内容
             
             // 初始化背景
@@ -462,6 +486,8 @@
                                 
                                 // 加载选中人设的内容
                                 loadAvatarContent(currentAvatar);
+                                // 加载用户列表
+                                loadUserList(currentAvatar);
                             }
                         } else {
                             console.error('加载人设列表失败:', data.message);
@@ -471,6 +497,50 @@
                     .catch(error => {
                         console.error('加载人设列表失败:', error);
                         showToast('加载人设列表失败: ' + error, 'error');
+                    });
+            }
+            
+            // 获取当前角色的用户列表
+            function loadUserList(avatarName) {
+                fetch(`/get_avatar_users?avatar=${avatarName}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            const selector = document.getElementById('userSelector');
+                            selector.innerHTML = ''; // 清空现有选项
+                            
+                            // 添加用户选项
+                            data.users.forEach(user => {
+                                const option = document.createElement('option');
+                                option.value = user;
+                                option.textContent = user;
+                                selector.appendChild(option);
+                            });
+                            
+                            // 设置默认选中项
+                            if (data.users.length > 0) {
+                                // 尝试从localStorage获取上次选择的用户
+                                const lastSelectedUser = localStorage.getItem(`lastSelectedUser_${avatarName}`);
+                                if (lastSelectedUser && data.users.includes(lastSelectedUser)) {
+                                    selector.value = lastSelectedUser;
+                                    currentUser = lastSelectedUser;
+                                } else {
+                                    // 默认选择第一个
+                                    selector.value = data.users[0];
+                                    currentUser = data.users[0];
+                                }
+                                
+                                // 保存当前选择
+                                localStorage.setItem(`lastSelectedUser_${avatarName}`, currentUser);
+                            }
+                        } else {
+                            console.error('加载用户列表失败:', data.message);
+                            showToast('加载用户列表失败: ' + data.message, 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('加载用户列表失败:', error);
+                        showToast('加载用户列表失败: ' + error, 'error');
                     });
             }
             
@@ -503,6 +573,9 @@
                             
                             // 显示加载成功提示
                             showToast(`已加载 ${avatarName} 的角色设定`, 'success');
+                            
+                            // 加载用户列表
+                            loadUserList(currentAvatar);
                         } else {
                             console.error('加载人设内容失败:', data.message);
                             showToast('加载人设内容失败: ' + data.message, 'error');
@@ -627,11 +700,12 @@
                 editCoreMemoryBtn.innerHTML = '<i class="bi bi-database-fill"></i> 编辑核心记忆';
                 editCoreMemoryBtn.title = '编辑角色的核心记忆';
                 editCoreMemoryBtn.addEventListener('click', function() {
-                    // 获取当前选中的角色名称
+                    // 获取当前选中的角色名称和用户ID
                     const currentAvatar = document.getElementById('avatarSelector').value;
+                    const currentUser = document.getElementById('userSelector').value;
                     
                     // 加载核心记忆内容
-                    fetch(`/load_core_memory?avatar=${currentAvatar}`)
+                    fetch(`/load_core_memory?avatar=${currentAvatar}&user_id=${currentUser}`)
                         .then(response => response.json())
                         .then(data => {
                             if (data.status === 'success') {
@@ -641,7 +715,7 @@
                                     <div class="modal-dialog modal-lg">
                                         <div class="modal-content">
                                             <div class="modal-header">
-                                                <h5 class="modal-title" id="coreMemoryModalLabel">${currentAvatar} - 核心记忆编辑</h5>
+                                                <h5 class="modal-title" id="coreMemoryModalLabel">${currentAvatar} - 用户 ${currentUser} 的核心记忆编辑</h5>
                                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                             </div>
                                             <div class="modal-body">
@@ -683,6 +757,7 @@
                                         },
                                         body: JSON.stringify({
                                             avatar: currentAvatar,
+                                            user_id: currentUser,
                                             content: memoryContent
                                         })
                                     })
@@ -712,7 +787,8 @@
                                                 'Content-Type': 'application/json',
                                             },
                                             body: JSON.stringify({
-                                                avatar: currentAvatar
+                                                avatar: currentAvatar,
+                                                user_id: currentUser
                                             })
                                         })
                                         .then(response => response.json())
@@ -749,11 +825,12 @@
                 editShortMemoryBtn.innerHTML = '<i class="bi bi-chat-dots"></i> 编辑短期记忆';
                 editShortMemoryBtn.title = '编辑角色的短期记忆对话历史';
                 editShortMemoryBtn.addEventListener('click', function() {
-                    // 获取当前选中的角色名称
+                    // 获取当前选中的角色名称和用户ID
                     const currentAvatar = document.getElementById('avatarSelector').value;
+                    const currentUser = document.getElementById('userSelector').value;
                     
                     // 加载短期记忆内容
-                    fetch(`/load_short_memory?avatar=${currentAvatar}`)
+                    fetch(`/load_short_memory?avatar=${currentAvatar}&user_id=${currentUser}`)
                         .then(response => response.json())
                         .then(data => {
                             if (data.status === 'success') {
@@ -763,7 +840,7 @@
                                     <div class="modal-dialog modal-xl">
                                         <div class="modal-content">
                                             <div class="modal-header">
-                                                <h5 class="modal-title" id="shortMemoryModalLabel">${currentAvatar} - 短期记忆对话编辑</h5>
+                                                <h5 class="modal-title" id="shortMemoryModalLabel">${currentAvatar} - 用户 ${currentUser} 的短期记忆对话编辑</h5>
                                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                             </div>
                                             <div class="modal-body">
@@ -805,6 +882,7 @@
                                             },
                                             body: JSON.stringify({
                                                 avatar: currentAvatar,
+                                                user_id: currentUser,
                                                 conversations: memoryContent
                                             })
                                         })
@@ -837,7 +915,8 @@
                                                 'Content-Type': 'application/json',
                                             },
                                             body: JSON.stringify({
-                                                avatar: currentAvatar
+                                                avatar: currentAvatar,
+                                                user_id: currentUser
                                             })
                                         })
                                         .then(response => response.json())
@@ -873,16 +952,8 @@
                 selector.appendChild(editShortMemoryBtn);
             }
             
-            // 监听人设选择器变化
-            document.getElementById('avatarSelector').addEventListener('change', function() {
-                const selectedAvatar = this.value;
-                if (selectedAvatar !== currentAvatar) {
-                    loadAvatarContent(selectedAvatar);
-                }
-            });
-            
-            // 保存按钮点击事件
-            document.getElementById('saveButton').addEventListener('click', function() {
+            // 保存角色设定
+            function saveAvatarSettings() {
                 const avatarData = {
                     avatar: currentAvatar, // 添加当前人设名称
                     task: document.getElementById('task').value,
@@ -917,57 +988,10 @@
                 .catch(error => {
                     showToast('保存失败: ' + error, 'error');
                 });
-            });
-
-            // 为所有文本框添加自动调整高度的功能
-            document.querySelectorAll('textarea.form-control').forEach(textarea => {
-                textarea.addEventListener('input', function() {
-                    this.style.height = 'auto';
-                    this.style.height = this.scrollHeight + 'px';
-                });
-            });
-            
-            // 显示提示消息
-            function showToast(message, type = 'success') {
-                const toast = document.createElement('div');
-                toast.className = 'toast-container position-fixed top-0 start-50 translate-middle-x p-3';
-                toast.innerHTML = `
-                    <div class="toast align-items-center text-white bg-${type === 'success' ? 'success' : 'danger'} border-0" role="alert" aria-live="assertive" aria-atomic="true">
-                        <div class="d-flex">
-                            <div class="toast-body">
-                                <i class="bi bi-${type === 'success' ? 'check-circle' : 'x-circle'} me-2"></i>${message}
-                            </div>
-                            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-                        </div>
-                    </div>
-                `;
-                document.body.appendChild(toast);
-                const toastEl = toast.querySelector('.toast');
-                const bsToast = new bootstrap.Toast(toastEl, {
-                    delay: 3000
-                });
-                bsToast.show();
-                
-                // 自动移除 toast
-                toastEl.addEventListener('hidden.bs.toast', function () {
-                    toast.remove();
-                });
             }
             
-            // 加载人设列表
-            loadAvatarList();
-            
-            // 添加查看原始MD内容的按钮
-            addViewRawButton();
-
-            // 新建人设按钮点击事件
-            document.getElementById('newAvatarBtn').addEventListener('click', function() {
-                const modal = new bootstrap.Modal(document.getElementById('newAvatarModal'));
-                modal.show();
-            });
-
-            // 创建人设按钮点击事件
-            document.getElementById('createAvatarBtn').addEventListener('click', function() {
+            // 创建新人设
+            function createNewAvatar() {
                 const avatarName = document.getElementById('newAvatarName').value.trim();
                 
                 if (!avatarName) {
@@ -1004,16 +1028,10 @@
                 .catch(error => {
                     showToast('创建失败: ' + error, 'error');
                 });
-            });
-
-            // 删除人设按钮点击事件
-            document.getElementById('deleteAvatarBtn').addEventListener('click', function() {
-                const modal = new bootstrap.Modal(document.getElementById('deleteAvatarModal'));
-                modal.show();
-            });
+            }
             
-            // 确认删除按钮点击事件
-            document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
+            // 删除当前人设
+            function deleteCurrentAvatar() {
                 const avatarName = document.getElementById('avatarSelector').value;
                 
                 fetch('/delete_avatar', {
@@ -1038,13 +1056,107 @@
                 .catch(error => {
                     showToast('删除失败: ' + error, 'error');
                 });
-            });
+            }
+            
+            // 初始化各种事件监听器
+            function initEventListeners() {
+                // 人设选择器变更事件
+                document.getElementById('avatarSelector').addEventListener('change', function() {
+                    const selectedAvatar = this.value;
+                    currentAvatar = selectedAvatar;
+                    loadAvatarContent(selectedAvatar);
+                });
+                
+                // 用户选择器变更事件
+                document.getElementById('userSelector').addEventListener('change', function() {
+                    const selectedUser = this.value;
+                    currentUser = selectedUser;
+                    localStorage.setItem(`lastSelectedUser_${currentAvatar}`, selectedUser);
+                    // 这里不需要重新加载角色内容，只需记录当前选中的用户
+                    showToast(`已切换到用户: ${selectedUser}`, 'success');
+                });
+                
+                // 刷新用户列表按钮
+                document.getElementById('refreshUsersBtn').addEventListener('click', function() {
+                    loadUserList(currentAvatar);
+                    showToast('用户列表已刷新', 'success');
+                });
+                
+                // 保存按钮点击事件
+                document.getElementById('saveButton').addEventListener('click', saveAvatarSettings);
+                
+                // 新建人设按钮点击事件
+                document.getElementById('newAvatarBtn').addEventListener('click', function() {
+                    new bootstrap.Modal(document.getElementById('newAvatarModal')).show();
+                });
+                
+                // 删除人设按钮点击事件
+                document.getElementById('deleteAvatarBtn').addEventListener('click', function() {
+                    new bootstrap.Modal(document.getElementById('deleteAvatarModal')).show();
+                });
+                
+                // 创建人设按钮点击事件
+                document.getElementById('createAvatarBtn').addEventListener('click', createNewAvatar);
+                
+                // 确认删除人设按钮点击事件
+                document.getElementById('confirmDeleteBtn').addEventListener('click', deleteCurrentAvatar);
+                
+                // 获取人设按钮点击事件
+                document.getElementById('getAvatarBtn').addEventListener('click', function() {
+                    new bootstrap.Modal(document.getElementById('getAvatarModal')).show();
+                });
+                
+                // 自动调整文本框高度
+                const textareas = document.querySelectorAll('textarea');
+                textareas.forEach(textarea => {
+                    textarea.addEventListener('input', function() {
+                        this.style.height = 'auto';
+                        this.style.height = (this.scrollHeight) + 'px';
+                    });
+                });
+            }
+            
+            // 添加工具栏按钮
+            function addToolbarButtons() {
+                // 添加原始MD查看按钮
+                addViewRawButton();
+                
+                // 在加载时初始化
+                initEventListeners();
+                
+                // 加载人设列表
+                loadAvatarList();
+            }
+            
+            // 执行初始化
+            addToolbarButtons();
 
-            // 获取人设按钮点击事件
-            document.getElementById('getAvatarBtn').addEventListener('click', function() {
-                const modal = new bootstrap.Modal(document.getElementById('getAvatarModal'));
-                modal.show();
-            });
+            // 显示提示消息
+            function showToast(message, type = 'success') {
+                const toast = document.createElement('div');
+                toast.className = 'toast-container position-fixed top-0 start-50 translate-middle-x p-3';
+                toast.innerHTML = `
+                    <div class="toast align-items-center text-white bg-${type === 'success' ? 'success' : 'danger'} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                        <div class="d-flex">
+                            <div class="toast-body">
+                                <i class="bi bi-${type === 'success' ? 'check-circle' : 'x-circle'} me-2"></i>${message}
+                            </div>
+                            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(toast);
+                const toastEl = toast.querySelector('.toast');
+                const bsToast = new bootstrap.Toast(toastEl, {
+                    delay: 3000
+                });
+                bsToast.show();
+                
+                // 自动移除 toast
+                toastEl.addEventListener('hidden.bs.toast', function () {
+                    toast.remove();
+                });
+            }
         });
     </script>
 </body>
