@@ -25,7 +25,18 @@ class EmojiHandler:
         self.emoji_dir = os.path.join(root_dir, config.behavior.context.avatar_dir, "emojis")
         
         # 支持的表情类型
-        self.emotion_types = ['happy', 'sad', 'angry', 'neutral','love','funny','cute']
+        self.emotion_types = [
+    'happy', 'sad', 'angry', 'neutral', 'love', 'funny', 'cute', 'bored', 'shy', 
+    'embarrassed', 'sleepy', 'lonely', 'hungry', '', 'surprise', 'confused', 
+    'playful', 'excited', 'tease', 'hot', 'speechless', 'scared', 'emo_1', 
+    'emo_2', 'emo_3', 'emo_4', 'emo_5', 'afraid', 'amused', 'anxious', 
+    'confident', 'cold', 'suspicious', 'loving', 'curious', 'envious', 
+    'jealous', 'miserable', 'stupid', 'sick', 'ashamed', 'withdrawn', 
+    'indifferent', 'sorry', 'determined', 'crazy', 'bashful', 'depressed', 
+    'enraged', 'frightened', 'interested', 'hopeful', 'regretful', 'stubborn', 
+    'thirsty', 'guilty', 'nervous', 'disgusted', 'proud', 'ecstatic', 
+    'frustrated', 'hurt', 'tired', 'smug', 'thoughtful', 'pained', 'optimistic', 
+    'relieved', 'puzzled', 'shocked', 'joyful', 'skeptical', 'bad', 'worried']
 
 
         self.screenshot_dir = os.path.join(root_dir, 'screenshot')
