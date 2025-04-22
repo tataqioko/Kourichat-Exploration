@@ -11,13 +11,12 @@ from datetime import datetime
 from typing import Dict
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.date import DateTrigger
-# 修改后的导入路径
 from src.utils.console import print_status
 
 logger = logging.getLogger('main')
 
 class ReminderService:
-    # 保留原有核心逻辑，合并重复的方法
+   
     def __init__(self, message_handler):
         self.scheduler = BackgroundScheduler()
         self.message_handler = message_handler
@@ -134,11 +133,5 @@ class ReminderService:
         time_diff = target_time - datetime.now()
         minutes = int(time_diff.total_seconds() / 60)
         
-        print("\n" + "=" * 80)
-        print(f"提醒任务 - {action}")
-        print("-" * 80)
-        print(f"任务ID: {task_id}")
-        print(f"接收者: {sender_name}")
-        print(f"提醒时间: {time_str} ({minutes}分钟后)")
-        print(f"提醒内容: {content}")
-        print("=" * 80 + "\n")
+        
+        logger.info(f"提醒任务[{action}]: ID={task_id[:8]}..., 接收者={sender_name}, 时间={time_str}({minutes}分钟后), 内容={content[:30]}{'...' if len(content) > 30 else ''}")

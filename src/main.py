@@ -45,9 +45,6 @@ for handler in logging.root.handlers[:]:
 logger_config = LoggerConfig(root_dir)
 logger = logger_config.setup_logger('main')
 listen_list = config.user.listen_list
-queue_lock = threading.Lock()  # 队列访问锁
-user_queues = {}  # 用户消息队列管理
-chat_contexts = {}  # 存储上下文
 # 初始化colorama
 init()
 
@@ -60,43 +57,11 @@ class ChatBot:
         self.image_recognition_service = image_recognition_service
         self.auto_sender = auto_sender
         self.emoji_handler = emoji_handler
-        self.user_queues = {}  # 将user_queues移到类的实例变量
-        self.queue_lock = threading.Lock()  # 将queue_lock也移到类的实例变量
         
         # 获取机器人的微信名称
         self.wx = WeChat()
         self.robot_name = self.wx.A_MyIcon.Name  # 使用Name属性而非方法
         logger.info(f"机器人名称: {self.robot_name}")
-
-    def process_user_messages(self, chat_id):
-        """处理用户消息队列"""
-        try:
-            with self.queue_lock:
-                if chat_id not in self.user_queues:
-                    return
-                user_data = self.user_queues.pop(chat_id)
-                messages = user_data['messages']
-                sender_name = user_data['sender_name']
-                username = user_data['username']
-                is_group = user_data.get('is_group', False)
-            
-            logger.info(f"处理消息 - 发送者: {sender_name}" + (" (群聊)" if is_group else ""))
-            logger.debug(f"消息内容: {messages}")
-
-            is_image_recognition = any("发送了图片：" in msg or "发送了表情包：" in msg for msg in messages)
-            content = "\n".join(messages)
-
-            self.message_handler.handle_user_message(
-                content=content,
-                chat_id=chat_id,
-                sender_name=sender_name,
-                username=username,
-                is_group=is_group,
-                is_image_recognition=is_image_recognition
-            )
-            
-        except Exception as e:
-            logger.error(f"处理消息队列失败: {str(e)}")
 
     def handle_wxauto_message(self, msg, chatName, is_group=False):
         try:

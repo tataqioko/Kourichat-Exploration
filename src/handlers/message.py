@@ -17,13 +17,10 @@ from services.database import Session, ChatMessage
 import random
 import os
 from services.ai.llm_service import LLMService
-# 替换旧的记忆处理器导入
 from modules.memory.memory_service import MemoryService
 from config import config
-# 导入
 from modules.reminder.time_recognition import TimeRecognitionService
 from modules.reminder import ReminderService
-# 导入调试命令处理器
 from .debug import DebugCommandHandler
 
 # 修改logger获取方式，确保与main模块一致
@@ -67,7 +64,7 @@ class MessageHandler:
         self.voice_handler = voice_handler
         # 使用新的记忆服务
         self.memory_service = memory_service
-        # 保存当前角色名 - 修复获取方式
+        # 保存当前角色名 
         avatar_path = os.path.join(self.root_dir, config.behavior.context.avatar_dir)
         self.current_avatar = os.path.basename(avatar_path)
         logger.info(f"当前使用角色: {self.current_avatar}")
@@ -96,7 +93,7 @@ class MessageHandler:
     def save_message(self, sender_id: str, sender_name: str, message: str, reply: str, is_system_message: bool = False):
         """保存聊天记录到数据库和短期记忆"""
         try:
-            # 清理回复中的@前缀，避免在记忆中累积
+            # 清理回复中的@前缀，防止幻觉
             clean_reply = reply
             if reply.startswith(f"@{sender_name} "):
                 clean_reply = reply[len(f"@{sender_name} "):]
@@ -113,8 +110,8 @@ class MessageHandler:
             session.commit()
             session.close()
             
-            # 使用新的记忆服务保存对话
-            # 获取当前角色名
+         
+          
             avatar_name = self.current_avatar
             # 添加到记忆，传递系统消息标志和用户ID
             self.memory_service.add_conversation(avatar_name, message, clean_reply, sender_id, is_system_message)
@@ -123,14 +120,14 @@ class MessageHandler:
             logger.error(f"保存消息失败: {str(e)}")
 
     def get_api_response(self, message: str, user_id: str, is_group: bool = False) -> str:
-        """获取 API 回复（含记忆增强）"""
+        """获取 API 回复"""
         avatar_dir = os.path.join(self.root_dir, config.behavior.context.avatar_dir)
         prompt_path = os.path.join(avatar_dir, "avatar.md")
         # 使用类中已初始化的当前角色名
         avatar_name = self.current_avatar
         
         try:
-            # 步骤1：读取原始提示内容
+            #读取原始提示内容
             with open(prompt_path, "r", encoding="utf-8") as f:
                 avatar_content = f.read()
                 logger.debug(f"角色提示文件大小: {len(avatar_content)} bytes")
@@ -140,7 +137,7 @@ class MessageHandler:
             core_memory_prompt = f"# 核心记忆\n{core_memory}" if core_memory else ""
             logger.debug(f"核心记忆长度: {len(core_memory)}")
             
-            # 步骤3：获取历史上下文（仅在程序重启时）
+            # 获取历史上下文（仅在程序重启时）
             # 检查是否已经为该用户加载过上下文
             recent_context = None
             if user_id not in self.deepseek.chat_contexts:
@@ -151,18 +148,16 @@ class MessageHandler:
             
             # 如果是群聊场景，添加群聊环境提示
             if is_group:
-                # 在系统提示中添加群聊场景说明
-                group_chat_prompt = """
-# 群聊环境提示
-你现在处于群聊环境中，会收到来自不同用户的消息。每条消息都会标明发送者为:<xxx>。
-请注意区分不同的发言人，并在回复时考虑整个群聊的上下文。
-"""
-                # 将群聊提示添加到系统提示之后
-                combined_system_prompt = f"{avatar_content}\n\n{group_chat_prompt}"
+                
+                group_prompt_path = os.path.join(self.root_dir, "data", "base", "group.md")
+                with open(group_prompt_path, "r", encoding="utf-8") as f:
+                    group_chat_prompt = f.read().strip()
+             
+                combined_system_prompt = f"{group_chat_prompt}\n\n{avatar_content}"
             else:
                 combined_system_prompt = avatar_content
             
-            # 调用API，传入人设提示和核心记忆（分开）
+           
             response = self.deepseek.get_response(
                 message=message, 
                 user_id=user_id, 
@@ -530,6 +525,11 @@ class MessageHandler:
 
     def _check_time_reminder(self, content: str, chat_id: str, sender_name: str):
         """检查和处理时间提醒"""
+        # 避免处理系统消息
+        if sender_name == "System" or sender_name.lower() == "system" :
+            logger.debug(f"跳过时间提醒识别：{sender_name}发送的消息不处理")
+            return
+            
         try:
             # 使用 time_recognition 服务识别时间
             time_infos = self.time_recognition.recognize_time(content)
