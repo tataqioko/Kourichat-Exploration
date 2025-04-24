@@ -76,14 +76,7 @@ def print_banner():
 ║     https://github.com/KouriChat/KouriChat   ║
 ╚══════════════════════════════════════════════╝
 
-KouriChat - AI Chat  Copyright (C) 2025,github.com/umaru-233
-This program comes with ABSOLUTELY NO WARRANTY; for details please read
-https://www.gnu.org/licenses/gpl-3.0.en.html.
-该程序是基于GPLv3许可证分发的，因此该程序不提供任何保证；有关更多信息，请参阅GPLv3许可证。
-This is free software, and you are welcome to redistribute it
-under certain conditions; please read
-https://www.gnu.org/licenses/gpl-3.0.en.html.
-这是免费软件，欢迎您二次分发它，在某些情况下，请参阅GPLv3许可证。
+KouriChat - AI Chat  Copyright (C) 2025, DeepAnima Network Technology Studio
 It's freeware, and if you bought it for money, you've been scammed!
 这是免费软件，如果你是花钱购买的，说明你被骗了！
 {Style.RESET_ALL}"""

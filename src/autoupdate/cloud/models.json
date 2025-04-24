@@ -33,14 +33,6 @@
             "register_url": "https://ollama.ai",
             "status": "active",
             "priority": 4
-        },
-        {
-            "id": "sealos",
-            "name": "Sealos AI",
-            "url": "https://aiproxy.bja.sealos.run/v1",
-            "register_url": "https://bja.sealos.run/?uid=xTYRWw1vvT",
-            "status": "active",
-            "priority": 5
         }
     ],
     "models": {
@@ -237,36 +229,6 @@
                 "status": "active",
                 "type": "chat",
                 "context_length": 16000
-            }
-        ],
-        "sealos": [
-            {
-                "id": "deepseek-chat",
-                "name": "DeepSeek Chat",
-                "status": "active",
-                "type": "chat",
-                "context_length": 16000
-            },
-            {
-                "id": "deepseek-reasoner",
-                "name": "DeepSeek Reasoner",
-                "status": "active",
-                "type": "chat",
-                "context_length": 16000
-            },
-            {
-                "id": "charglm-4",
-                "name": "CharGLM-4",
-                "status": "active",
-                "type": "chat",
-                "context_length": 8192
-            },
-            {
-                "id": "moonshot-v1-8k",
-                "name": "Moonshot V1",
-                "status": "active",
-                "type": "chat",
-                "context_length": 8192
             }
         ]
     }

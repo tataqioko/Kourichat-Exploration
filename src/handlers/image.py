@@ -26,17 +26,20 @@ class ImageHandler:
         self.base_url = base_url
         self.image_model = image_model
         self.temp_dir = os.path.join(root_dir, "data", "images", "temp")
-        
+
         # 复用消息模块的AI实例(使用正确的模型名称)
+        from config import config
         self.text_ai = LLMService(
             api_key=api_key,
             base_url=base_url,
-            model="deepseek-ai/DeepSeek-V3",  # 修改为默认免费模型
+            model="kourichat-vision",  # 修改为默认免费模型
             max_token=2048,
             temperature=0.5,
-            max_groups=15
+            max_groups=15,
+            top_p=getattr(config.media.image_recognition, 'top_p', 0.95),
+            frequency_penalty=getattr(config.media.image_recognition, 'frequency_penalty', 0.2)
         )
-        
+
         # 多语言提示模板
         self.prompt_templates = {
             'basic': (
@@ -80,7 +83,7 @@ class ImageHandler:
             "low contrast", "bad perspective", "mutation",
             "childish", "beginner", "amateur"
         ]
-        
+
         # 动态负面提示词生成模板
         self.negative_prompt_template = (
             "根据以下图片描述，生成5个英文负面提示词（用逗号分隔），避免出现：\n"
@@ -104,24 +107,24 @@ class ImageHandler:
             r'来点图',
             r'想看图',
         ]
-        
+
         # 将消息转换为小写以进行不区分大小写的匹配
         message = message.lower()
-        
+
         # 1. 检查基础模式
         if any(pattern in message for pattern in basic_patterns):
             return True
-            
+
         # 2. 检查更复杂的模式
         complex_patterns = [
             r'来[张个幅]图',
             r'发[张个幅]图',
             r'看[张个幅]图',
         ]
-        
+
         if any(re.search(pattern, message) for pattern in complex_patterns):
             return True
-            
+
         return False
 
     def get_random_image(self) -> Optional[str]:
@@ -129,18 +132,18 @@ class ImageHandler:
         try:
             if not os.path.exists(self.temp_dir):
                 os.makedirs(self.temp_dir)
-                
+
             # 获取图片链接
             response = requests.get('https://t.mwm.moe/pc')
             if response.status_code == 200:
                 # 生成唯一文件名
                 timestamp = int(time.time())
                 image_path = os.path.join(self.temp_dir, f'image_{timestamp}.jpg')
-                
+
                 # 保存图片
                 with open(image_path, 'wb') as f:
                     f.write(response.content)
-                
+
                 return image_path
         except Exception as e:
             logger.error(f"获取图片失败: {str(e)}")
@@ -150,13 +153,13 @@ class ImageHandler:
         """判断是否为图像生成请求"""
         # 基础动词
         draw_verbs = ["画", "绘", "生成", "创建", "做"]
-        
+
         # 图像相关词
         image_nouns = ["图", "图片", "画", "照片", "插画", "像"]
-        
+
         # 数量词
         quantity = ["一下", "一个", "一张", "个", "张", "幅"]
-        
+
         # 组合模式
         patterns = [
             r"画.*[猫狗人物花草山水]",
@@ -173,11 +176,11 @@ class ImageHandler:
             r"画画",
             r"画一画",
         ]
-        
+
         # 1. 检查正则表达式模式
         if any(re.search(pattern, text) for pattern in patterns):
             return True
-            
+
         # 2. 检查动词+名词组合
         for verb in draw_verbs:
             for noun in image_nouns:
@@ -189,17 +192,17 @@ class ImageHandler:
                         return True
                     if f"{verb}{noun}{q}" in text:
                         return True
-        
+
         # 3. 检查特定短语
         special_phrases = [
             "帮我画", "给我画", "帮画", "给画",
             "能画吗", "可以画吗", "会画吗",
             "想要图", "要图", "需要图",
         ]
-        
+
         if any(phrase in text for phrase in special_phrases):
             return True
-        
+
         return False
 
     def _expand_prompt(self, prompt: str) -> str:
@@ -207,7 +210,7 @@ class ImageHandler:
         try:
             if len(prompt) >= 30:  # 长度足够则不扩展
                 return prompt
-                
+
             response = self.text_ai.chat(
                 messages=[{"role": "user", "content": self.prompt_templates['basic'].format(prompt=prompt)}],
                 temperature=0.7
@@ -237,7 +240,7 @@ class ImageHandler:
         try:
             # 获取现有通用负面词前10个作为示例
             existing_samples = ', '.join(self.base_negative_prompts[:10])
-            
+
             response = self.text_ai.chat([{
                 "role": "user",
                 "content": self.negative_prompt_template.format(
@@ -245,7 +248,7 @@ class ImageHandler:
                     existing_negatives=existing_samples
                 )
             }])
-            
+
             # 解析响应并去重
             generated = [n.strip().lower() for n in response.split(',')]
             return list(set(generated))
@@ -257,12 +260,12 @@ class ImageHandler:
         """构建最终负面提示词"""
         # 始终包含基础负面词
         final_negatives = set(self.base_negative_prompts)
-        
+
         # 当提示词简短时触发动态生成
         if len(prompt) <= self.prompt_extend_threshold:
             dynamic_negatives = self._generate_dynamic_negatives(prompt)
             final_negatives.update(dynamic_negatives)
-        
+
         return ', '.join(final_negatives)
 
     def _optimize_prompt(self, prompt: str) -> Tuple[str, str]:
@@ -273,17 +276,17 @@ class ImageHandler:
                 "role": "user",
                 "content": self.prompt_templates['basic'].format(prompt=prompt)
             }])
-            
+
             # 第二阶段：创意增强
             stage2 = self.text_ai.chat([{
                 "role": "user",
                 "content": self.prompt_templates['creative'].format(prompt=prompt)
             }])
-            
+
             # 混合策略：取两次优化的关键要素
             final_prompt = f"{stage1}, {stage2.split(',')[-1]}"
             return final_prompt, "multi-step"
-            
+
         except Exception as e:
             logger.error(f"提示词优化失败: {str(e)}")
             return prompt, "raw"
@@ -303,25 +306,25 @@ class ImageHandler:
             # 自动扩展短提示词
             if len(prompt) <= self.prompt_extend_threshold:
                 prompt = self._expand_prompt(prompt)
-            
+
             # 多阶段提示词优化
             optimized_prompt, strategy = self._optimize_prompt(prompt)
             logger.info(f"优化策略: {strategy}, 优化后提示词: {optimized_prompt}")
-            
+
             # 构建负面提示词
             negative_prompt = self._build_final_negatives(optimized_prompt)
             logger.info(f"最终负面提示词: {negative_prompt}")
-            
+
             # 质量配置选择
             quality_config = self._select_quality_profile(optimized_prompt)
             logger.info(f"质量配置: {quality_config}")
-            
+
             # 构建请求参数
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json"
             }
-            
+
             payload = {
                 "model": self.image_model,
                 "prompt": f"masterpiece, best quality, {optimized_prompt}",
@@ -332,7 +335,7 @@ class ImageHandler:
                 "guidance_scale": 7.5,
                 "seed": int(time.time() % 1000)  # 添加随机种子
             }
-            
+
             # 调用生成API
             response = requests.post(
                 f"{self.base_url}/images/generations",
@@ -341,7 +344,7 @@ class ImageHandler:
                 timeout=45
             )
             response.raise_for_status()
-            
+
             # 结果处理
             result = response.json()
             if "data" in result and len(result["data"]) > 0:
@@ -356,7 +359,7 @@ class ImageHandler:
                     return temp_path
             logger.error("API返回的数据中没有图片URL")
             return None
-            
+
         except Exception as e:
             logger.error(f"图像生成失败: {str(e)}")
             return None

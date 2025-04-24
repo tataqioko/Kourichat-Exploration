@@ -94,7 +94,7 @@ config_path = os.path.join(ROOT_DIR, 'src/config/config.json')  # 将配置路�
 # 禁用Python的字节码缓存
 sys.dont_write_bytecode = True
 
-app = Flask(__name__, 
+app = Flask(__name__,
     template_folder=os.path.join(ROOT_DIR, 'src/webui/templates'),
     static_folder=os.path.join(ROOT_DIR, 'src/webui/static'))
 
@@ -111,8 +111,27 @@ app.secret_key = secrets.token_hex(16)
 app.register_blueprint(avatar_manager)
 app.register_blueprint(avatar_bp)
 
-# 公告配置文件路径
-ANNOUNCEMENT_CONFIG_PATH = os.path.join(ROOT_DIR, 'src/config/announcement.json')
+# 导入更新器中的常量
+from src.autoupdate.updater import Updater
+
+# 公告和版本配置文件路径
+ANNOUNCEMENT_CONFIG_PATH = os.path.join(ROOT_DIR, 'src/autoupdate/cloud/announcement.json')
+VERSION_CONFIG_PATH = os.path.join(ROOT_DIR, 'src/autoupdate/cloud/version.json')
+
+# 在应用启动时检查云端更新
+def check_cloud_updates_on_startup():
+    try:
+        from src.autoupdate.updater import check_cloud_info
+        logger.info("应用启动时检查云端更新...")
+        check_cloud_info()
+        logger.info("云端更新检查完成")
+    except Exception as e:
+        logger.error(f"检查云端更新失败: {e}")
+
+# 启动一个后台线程来检查云端更新
+update_thread = threading.Thread(target=check_cloud_updates_on_startup)
+update_thread.daemon = True
+update_thread.start()
 
 # 添加全局标记，跟踪公告是否已在本应用实例中显示过
 announcement_shown_this_instance = False
@@ -124,7 +143,7 @@ def get_available_avatars() -> List[str]:
         os.makedirs(avatar_base_dir, exist_ok=True)
         logger.info(f"创建人设目录: {avatar_base_dir}")
         return []
-    
+
     # 获取所有包含 avatar.md 和 emojis 目录的有效人设目录
     avatars = []
     for item in os.listdir(avatar_base_dir):
@@ -132,41 +151,41 @@ def get_available_avatars() -> List[str]:
         if os.path.isdir(avatar_dir):
             avatar_md_path = os.path.join(avatar_dir, "avatar.md")
             emojis_dir = os.path.join(avatar_dir, "emojis")
-            
+
             # 如果缺少必要文件，尝试创建
             if not os.path.exists(emojis_dir):
                 os.makedirs(emojis_dir, exist_ok=True)
                 logger.info(f"为人设 {item} 创建表情包目录")
-                
+
             if not os.path.exists(avatar_md_path):
                 with open(avatar_md_path, 'w', encoding='utf-8') as f:
                     f.write("# 任务\n请在此处描述角色的任务和目标\n\n# 角色\n请在此处描述角色的基本信息\n\n# 外表\n请在此处描述角色的外表特征\n\n# 经历\n请在此处描述角色的经历和背景故事\n\n# 性格\n请在此处描述角色的性格特点\n\n# 经典台词\n请在此处列出角色的经典台词\n\n# 喜好\n请在此处描述角色的喜好\n\n# 备注\n其他需要补充的信息")
                 logger.info(f"为人设 {item} 创建模板avatar.md文件")
-            
+
             # 检查文件和目录是否存在
             if os.path.exists(avatar_md_path) and os.path.exists(emojis_dir):
                 avatars.append(f"data/avatars/{item}")
-            
+
     # 如果没有人设，创建默认人设
     if not avatars:
         default_avatar = "MONO"
         default_dir = os.path.join(avatar_base_dir, default_avatar)
         os.makedirs(default_dir, exist_ok=True)
         os.makedirs(os.path.join(default_dir, "emojis"), exist_ok=True)
-        
+
         # 创建默认人设文件
         with open(os.path.join(default_dir, "avatar.md"), 'w', encoding='utf-8') as f:
             f.write("# 任务\n作为一个温柔体贴的虚拟助手，为用户提供陪伴和帮助\n\n# 角色\n名字: MONO\n身份: AI助手\n\n# 外表\n清新甜美的少女形象\n\n# 经历\n被创造出来陪伴用户\n\n# 性格\n温柔、体贴、善解人意\n\n# 经典台词\n\"我会一直陪着你的~\"\n\"今天过得怎么样呀？\"\n\"需要我做什么呢？\"\n\n# 喜好\n喜欢和用户聊天\n喜欢分享知识\n\n# 备注\n默认人设")
-        
+
         avatars.append(f"data/avatars/{default_avatar}")
         logger.info("创建了默认人设 MONO")
-    
+
     return avatars
 
 def parse_config_groups() -> Dict[str, Dict[str, Any]]:
     """解析配置文件，将配置项按组分类"""
     from src.config import config
-    
+
     try:
         # 基础配置组
         config_groups = {
@@ -204,6 +223,20 @@ def parse_config_groups() -> Dict[str, Dict[str, Any]]:
                     "description": "温度参数",
                     "min": 0.0,
                     "max": 1.7,
+                },
+                "TOP_P": {
+                    "value": float(config.llm.top_p),
+                    "type": "number",
+                    "description": "Top-p采样参数",
+                    "min": 0.1,
+                    "max": 1.0,
+                },
+                "FREQUENCY_PENALTY": {
+                    "value": float(config.llm.frequency_penalty),
+                    "type": "number",
+                    "description": "频率惩罚参数",
+                    "min": 0.0,
+                    "max": 2.0,
                 },
             }
         )
@@ -261,7 +294,7 @@ def parse_config_groups() -> Dict[str, Dict[str, Any]]:
                 },
             }
         )
-        
+
         # 消息配置
         config_groups["消息配置"].update(
             {
@@ -303,7 +336,7 @@ def parse_config_groups() -> Dict[str, Dict[str, Any]]:
                         tasks = config_data['categories']['schedule_settings']['settings']['tasks'].get('value', [])
         except Exception as e:
             logger.error(f"读取任务数据失败: {str(e)}")
-        
+
         # 将定时任务配置添加到 config_groups 中
         config_groups['定时任务配置'] = {
             'tasks': {
@@ -312,11 +345,11 @@ def parse_config_groups() -> Dict[str, Dict[str, Any]]:
                 'description': '定时任务列表'
             }
         }
-        
+
         logger.debug(f"解析后的定时任务配置: {tasks}")
-        
+
         return config_groups
-        
+
     except Exception as e:
         logger.error(f"解析配置组失败: {str(e)}")
         return {}
@@ -393,7 +426,7 @@ def save_config():
                 try:
                     tasks = value if isinstance(value, list) else (json.loads(value) if isinstance(value, str) else [])
                     logger.debug(f"处理任务数据: {tasks}")
-                    
+
                     # 确保schedule_settings结构存在
                     if 'categories' not in current_config:
                         current_config['categories'] = {}
@@ -410,7 +443,7 @@ def save_config():
                             'type': 'array',
                             'description': '定时任务列表'
                         }
-                    
+
                     # 更新任务列表
                     current_config['categories']['schedule_settings']['settings']['tasks']['value'] = tasks
                 except Exception as e:
@@ -422,8 +455,8 @@ def save_config():
                     }), 400
             # 处理其他配置项
             elif key in ['LISTEN_LIST', 'DEEPSEEK_BASE_URL', 'MODEL', 'DEEPSEEK_API_KEY', 'MAX_TOKEN', 'TEMPERATURE',
-                       'VISION_API_KEY', 'VISION_BASE_URL', 'VISION_TEMPERATURE', 'VISION_MODEL',
-                       'IMAGE_MODEL', 'TEMP_IMAGE_DIR', 'AUTO_MESSAGE', 'MIN_COUNTDOWN_HOURS', 'MAX_COUNTDOWN_HOURS',
+                       'TOP_P', 'FREQUENCY_PENALTY', 'VISION_API_KEY', 'VISION_BASE_URL', 'VISION_TEMPERATURE', 'VISION_MODEL',
+                       'VISION_TOP_P', 'VISION_FREQUENCY_PENALTY', 'IMAGE_MODEL', 'TEMP_IMAGE_DIR', 'AUTO_MESSAGE', 'MIN_COUNTDOWN_HOURS', 'MAX_COUNTDOWN_HOURS',
                        'QUIET_TIME_START', 'QUIET_TIME_END', 'TTS_API_URL', 'VOICE_DIR', 'MAX_GROUPS', 'AVATAR_DIR',
                        'QUEUE_TIMEOUT']:
                 update_config_value(current_config, key, value)
@@ -437,19 +470,19 @@ def save_config():
                 "message": "保存配置文件失败",
                 "title": "错误"
             }), 500
-        
+
         # 立即重新加载配置
         g.config_data = current_config
-        
+
         # 重新初始化定时任务
         reinitialize_tasks()
-        
+
         return jsonify({
             "status": "success",
             "message": "✨ 配置已成功保存并生效",
             "title": "保存成功"
         })
-        
+
     except Exception as e:
         logger.error(f"保存配置失败: {str(e)}")
         return jsonify({
@@ -469,10 +502,14 @@ def update_config_value(config_data, key, value):
             'DEEPSEEK_API_KEY': ['categories', 'llm_settings', 'settings', 'api_key', 'value'],
             'MAX_TOKEN': ['categories', 'llm_settings', 'settings', 'max_tokens', 'value'],
             'TEMPERATURE': ['categories', 'llm_settings', 'settings', 'temperature', 'value'],
+            'TOP_P': ['categories', 'llm_settings', 'settings', 'top_p', 'value'],
+            'FREQUENCY_PENALTY': ['categories', 'llm_settings', 'settings', 'frequency_penalty', 'value'],
             'VISION_API_KEY': ['categories', 'media_settings', 'settings', 'image_recognition', 'api_key', 'value'],
             'VISION_BASE_URL': ['categories', 'media_settings', 'settings', 'image_recognition', 'base_url', 'value'],
             'VISION_TEMPERATURE': ['categories', 'media_settings', 'settings', 'image_recognition', 'temperature', 'value'],
             'VISION_MODEL': ['categories', 'media_settings', 'settings', 'image_recognition', 'model', 'value'],
+            'VISION_TOP_P': ['categories', 'media_settings', 'settings', 'image_recognition', 'top_p', 'value'],
+            'VISION_FREQUENCY_PENALTY': ['categories', 'media_settings', 'settings', 'image_recognition', 'frequency_penalty', 'value'],
             'IMAGE_MODEL': ['categories', 'media_settings', 'settings', 'image_generation', 'model', 'value'],
             'TEMP_IMAGE_DIR': ['categories', 'media_settings', 'settings', 'image_generation', 'temp_dir', 'value'],
             'TTS_API_URL': ['categories', 'media_settings', 'settings', 'text_to_speech', 'tts_api_url', 'value'],
@@ -486,16 +523,16 @@ def update_config_value(config_data, key, value):
             'MAX_GROUPS': ['categories', 'behavior_settings', 'settings', 'context', 'max_groups', 'value'],
             'AVATAR_DIR': ['categories', 'behavior_settings', 'settings', 'context', 'avatar_dir', 'value'],
         }
-        
+
         if key in mapping:
             path = mapping[key]
             current = config_data
-            
+
             # 特殊处理 LISTEN_LIST，确保它始终是列表类型
             if key == 'LISTEN_LIST' and isinstance(value, str):
                 value = value.split(',')
                 value = [item.strip() for item in value if item.strip()]
-            
+
             # 特殊处理API相关配置
             if key in ['DEEPSEEK_BASE_URL', 'MODEL', 'DEEPSEEK_API_KEY']:
                 # 确保llm_settings结构存在
@@ -505,7 +542,7 @@ def update_config_value(config_data, key, value):
                     current['categories']['llm_settings'] = {'title': '大语言模型配置', 'settings': {}}
                 if 'settings' not in current['categories']['llm_settings']:
                     current['categories']['llm_settings']['settings'] = {}
-                
+
                 # 更新对应的配置项
                 if key == 'DEEPSEEK_BASE_URL':
                     current['categories']['llm_settings']['settings']['base_url'] = {'value': value}
@@ -514,16 +551,16 @@ def update_config_value(config_data, key, value):
                 elif key == 'DEEPSEEK_API_KEY':
                     current['categories']['llm_settings']['settings']['api_key'] = {'value': value}
                 return
-            
+
             # 遍历路径直到倒数第二个元素
             for part in path[:-1]:
                 if part not in current:
                     current[part] = {}
                 current = current[part]
-            
+
             # 设置最终值，确保类型正确
-            if isinstance(value, str) and key in ['MAX_TOKEN', 'TEMPERATURE', 'VISION_TEMPERATURE', 
-                                               'MIN_COUNTDOWN_HOURS', 'MAX_COUNTDOWN_HOURS', 'MAX_GROUPS',
+            if isinstance(value, str) and key in ['MAX_TOKEN', 'TEMPERATURE', 'TOP_P', 'FREQUENCY_PENALTY', 'VISION_TEMPERATURE',
+                                               'VISION_TOP_P', 'VISION_FREQUENCY_PENALTY', 'MIN_COUNTDOWN_HOURS', 'MAX_COUNTDOWN_HOURS', 'MAX_GROUPS',
                                                'QUEUE_TIMEOUT']:
                 try:
                     # 尝试转换为数字
@@ -533,12 +570,12 @@ def update_config_value(config_data, key, value):
                         value = int(value)
                 except ValueError:
                     pass
-            
+
             current[path[-1]] = value
             logger.debug(f"已更新配置 {key}: {value}")
         else:
             logger.warning(f"未知的配置项: {key}")
-    
+
     except Exception as e:
         logger.error(f"更新配置值失败 {key}: {str(e)}")
 
@@ -547,15 +584,15 @@ def update_config_value(config_data, key, value):
 def upload_background():
     if 'background' not in request.files:
         return jsonify({"status": "error", "message": "没有选择文件"})
-    
+
     file = request.files['background']
     if file.filename == '':
         return jsonify({"status": "error", "message": "没有选择文件"})
-    
+
     # 确保 filename 不为 None
     if file.filename is None:
         return jsonify({"status": "error", "message": "文件名无效"})
-        
+
     filename = secure_filename(file.filename)
     # 清理旧的背景图片
     for old_file in os.listdir(app.config['UPLOAD_FOLDER']):
@@ -563,7 +600,7 @@ def upload_background():
     # 保存新图片
     file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
     return jsonify({
-        "status": "success", 
+        "status": "success",
         "message": "背景图片已更新",
         "path": f"/background_image/{filename}"
     })
@@ -642,26 +679,26 @@ def system_info():
         memory = psutil.virtual_memory()
         disk = psutil.disk_usage('/')
         net = psutil.net_io_counters()
-        
+
         # 计算网络速度
         current_time = time.time()
         time_delta = current_time - system_info.last_bytes['time']
-        
+
         # 计算每秒的字节数
         upload_speed = (net.bytes_sent - system_info.last_bytes['sent']) / time_delta
         download_speed = (net.bytes_recv - system_info.last_bytes['recv']) / time_delta
-        
+
         # 更新上次的值
         system_info.last_bytes = {
             'sent': net.bytes_sent,
             'recv': net.bytes_recv,
             'time': current_time
         }
-        
+
         # 转换为 KB/s
         upload_speed = upload_speed / 1024
         download_speed = download_speed / 1024
-        
+
         return jsonify({
             'cpu': cpu_percent,
             'memory': {
@@ -690,9 +727,10 @@ def system_info():
 def check_update():
     """检查更新"""
     try:
+        # 使用已导入的 Updater 类
         updater = Updater()
         result = updater.check_for_updates()
-        
+
         return jsonify({
             'status': 'success',
             'has_update': result.get('has_update', False),
@@ -701,6 +739,7 @@ def check_update():
             'wait_input': result.get('has_update', False)
         })
     except Exception as e:
+        logger.error(f"检查更新失败: {str(e)}", exc_info=True)
         return jsonify({
             'status': 'error',
             'has_update': False,
@@ -713,14 +752,15 @@ def confirm_update():
     try:
         choice = (request.json or {}).get('choice', '').lower()
         logger.info(f"收到用户更新选择: {choice}")
-        
+
         if choice in ('y', 'yes', '是', '确认', '确定'):
             logger.info("用户确认更新，开始执行更新过程")
+            # 使用已导入的 Updater 类
             updater = Updater()
             result = updater.update(
                 callback=lambda msg: logger.info(f"更新进度: {msg}")
             )
-            
+
             logger.info(f"更新完成，结果: {result['success']}")
             return jsonify({
                 'status': 'success' if result['success'] else 'error',
@@ -742,18 +782,18 @@ def confirm_update():
 def start_bot_process():
     """启动机器人进程，返回(成功状态, 消息)"""
     global bot_process, bot_start_time, job_object
-    
+
     try:
         if bot_process and bot_process.poll() is None:
             return False, "机器人已在运行中"
-        
+
         # 清空之前的日志
         clear_bot_logs()
-        
+
         # 设置环境变量
         env = os.environ.copy()
         env['PYTHONIOENCODING'] = 'utf-8'
-        
+
         # 创建新的进程组
         if sys.platform.startswith('win'):
             CREATE_NEW_PROCESS_GROUP = 0x00000200
@@ -763,7 +803,7 @@ def start_bot_process():
         else:
             creationflags = 0
             preexec_fn = getattr(os, 'setsid', None)
-        
+
         # 启动进程
         bot_process = subprocess.Popen(
             [sys.executable, 'run.py'],
@@ -777,7 +817,7 @@ def start_bot_process():
             creationflags=creationflags if sys.platform.startswith('win') else 0,
             preexec_fn=preexec_fn
         )
-        
+
         # 将机器人进程添加到作业对象
         if sys.platform.startswith('win') and job_object:
             try:
@@ -785,13 +825,13 @@ def start_bot_process():
                 logger.info(f"已将机器人进程 (PID: {bot_process.pid}) 添加到作业对象")
             except Exception as e:
                 logger.error(f"将机器人进程添加到作业对象失败: {str(e)}")
-        
+
         # 记录启动时间
         bot_start_time = datetime.datetime.now()
-        
+
         # 启动日志读取线程
         start_log_reading_thread()
-        
+
         return True, "机器人启动成功"
     except Exception as e:
         logger.error(f"启动机器人失败: {str(e)}")
@@ -818,7 +858,7 @@ def start_log_reading_thread():
         except Exception as e:
             logger.error(f"读取日志失败: {str(e)}")
             bot_logs.put(f"[ERROR] 读取日志失败: {str(e)}")
-    
+
     thread = threading.Thread(target=read_output, daemon=True)
     thread.start()
 
@@ -826,13 +866,13 @@ def get_bot_uptime():
     """获取机器人运行时间"""
     if not bot_start_time or not bot_process or bot_process.poll() is not None:
         return "0分钟"
-    
+
     delta = datetime.datetime.now() - bot_start_time
     total_seconds = int(delta.total_seconds())
     hours = total_seconds // 3600
     minutes = (total_seconds % 3600) // 60
     seconds = total_seconds % 60
-    
+
     if hours > 0:
         return f"{hours}小时{minutes}分钟{seconds}秒"
     elif minutes > 0:
@@ -855,7 +895,7 @@ def get_bot_logs():
     logs = []
     while not bot_logs.empty():
         logs.append(bot_logs.get())
-    
+
     return jsonify({
         'status': 'success',
         'logs': logs,
@@ -866,14 +906,14 @@ def get_bot_logs():
 def terminate_bot_process(force=False):
     """终止机器人进程的通用函数"""
     global bot_process, bot_start_time
-    
+
     if not bot_process or bot_process.poll() is not None:
         return False, "机器人未在运行"
-        
+
     try:
         # 首先尝试正常终止进程
         bot_process.terminate()
-        
+
         # 等待进程结束
         try:
             bot_process.wait(timeout=5)  # 等待最多5秒
@@ -882,10 +922,10 @@ def terminate_bot_process(force=False):
             if force:
                 bot_process.kill()
                 bot_process.wait()
-        
+
         # 确保所有子进程都被终止
         if sys.platform.startswith('win'):
-            subprocess.run(['taskkill', '/F', '/T', '/PID', str(bot_process.pid)], 
+            subprocess.run(['taskkill', '/F', '/T', '/PID', str(bot_process.pid)],
                          capture_output=True)
         else:
             # 使用 getattr 避免在 Windows 上直接引用不存在的属性
@@ -896,19 +936,19 @@ def terminate_bot_process(force=False):
                 killpg(getpgid(bot_process.pid), signal.SIGTERM)
             else:
                 bot_process.kill()
-        
+
         # 清理进程对象
         bot_process = None
         bot_start_time = None
-        
+
         # 添加日志记录
         timestamp = datetime.datetime.now().strftime('%H:%M:%S')
         bot_logs.put(f"[{timestamp}] 正在关闭监听线程...")
         bot_logs.put(f"[{timestamp}] 正在关闭系统...")
         bot_logs.put(f"[{timestamp}] 系统已退出")
-        
+
         return True, "机器人已停止"
-            
+
     except Exception as e:
         logger.error(f"停止机器人失败: {str(e)}")
         return False, f"停止失败: {str(e)}"
@@ -932,7 +972,7 @@ def config():
     """配置页面"""
     if not session.get('logged_in'):
         return redirect(url_for('login'))
-        
+
     # 直接从配置文件读取任务数据
     tasks = []
     try:
@@ -944,11 +984,11 @@ def config():
                     tasks = config_data['categories']['schedule_settings']['settings']['tasks'].get('value', [])
     except Exception as e:
         logger.error(f"读取任务数据失败: {str(e)}")
-    
+
     config_groups = parse_config_groups()  # 获取配置组
-    
+
     logger.debug(f"传递给前端的任务列表: {tasks}")
-    
+
     return render_template(
         'config.html',
         config_groups=config_groups,  # 传递配置组
@@ -971,7 +1011,7 @@ def execute_command():
     """执行控制台命令"""
     try:
         command = (request.json or {}).get('command', '').strip()
-        
+
         # 处理内置命令
         if command.lower() == 'help':
             return jsonify({
@@ -993,7 +1033,7 @@ echo - 显示消息
 type - 显示文件内容
 等...'''
             })
-            
+
         elif command.lower() == 'clear':
             # 清空日志队列
             clear_bot_logs()
@@ -1002,7 +1042,7 @@ type - 显示文件内容
                 'output': '',  # 返回空输出，让前端清空日志
                 'clear': True  # 添加标记，告诉前端需要清空日志
             })
-            
+
         elif command.lower() == 'status':
             if bot_process and bot_process.poll() is None:
                 return jsonify({
@@ -1014,34 +1054,34 @@ type - 显示文件内容
                     'status': 'success',
                     'output': '机器人状态: 已停止'
                 })
-            
+
         elif command.lower() == 'version':
             return jsonify({
                 'status': 'success',
                 'output': 'KouriChat v1.3.1'
             })
-            
+
         elif command.lower() == 'memory':
             memory = psutil.virtual_memory()
             return jsonify({
                 'status': 'success',
                 'output': f'内存使用: {memory.percent}% ({memory.used/1024/1024/1024:.1f}GB/{memory.total/1024/1024/1024:.1f}GB)'
             })
-            
+
         elif command.lower() == 'start':
             success, message = start_bot_process()
             return jsonify({
                 'status': 'success' if success else 'error',
                 'output' if success else 'error': message
             })
-            
+
         elif command.lower() == 'stop':
             success, message = terminate_bot_process(force=True)
             return jsonify({
                 'status': 'success' if success else 'error',
                 'output' if success else 'error': message
             })
-            
+
         elif command.lower() == 'restart':
             # 先停止
             if bot_process and bot_process.poll() is None:
@@ -1051,9 +1091,9 @@ type - 显示文件内容
                         'status': 'error',
                         'error': '重启失败: 无法停止当前进程'
                     })
-            
+
             time.sleep(2)  # 等待进程完全停止
-            
+
             # 然后重新启动
             success, message = start_bot_process()
             if success:
@@ -1066,7 +1106,7 @@ type - 显示文件内容
                     'status': 'error',
                     'error': f'重启失败: {message}'
                 })
-            
+
         # 执行CMD命令
         else:
             try:
@@ -1080,23 +1120,23 @@ type - 显示文件内容
                     encoding='utf-8',
                     errors='replace'
                 )
-                
+
                 # 获取命令输出
                 stdout, stderr = process.communicate(timeout=30)
-                
+
                 # 如果有错误输出
                 if stderr:
                     return jsonify({
                         'status': 'error',
                         'error': stderr
                     })
-                    
+
                 # 返回命令执行结果
                 return jsonify({
                     'status': 'success',
                     'output': stdout or '命令执行成功，无输出'
                 })
-                
+
             except subprocess.TimeoutExpired:
                 process.kill()
                 return jsonify({
@@ -1108,7 +1148,7 @@ type - 显示文件内容
                     'status': 'error',
                     'error': f'执行命令失败: {str(e)}'
                 })
-            
+
     except Exception as e:
         return jsonify({
             'status': 'error',
@@ -1121,15 +1161,15 @@ def check_dependencies():
     try:
         # 检查Python版本
         python_version = sys.version.split()[0]
-        
+
         # 检查pip是否安装
         pip_path = shutil.which('pip')
         has_pip = pip_path is not None
-        
+
         # 检查requirements.txt是否存在
         requirements_path = os.path.join(ROOT_DIR, 'requirements.txt')
         has_requirements = os.path.exists(requirements_path)
-        
+
         # 如果requirements.txt存在，检查是否所有依赖都已安装
         dependencies_status = "unknown"
         missing_deps = []
@@ -1142,60 +1182,60 @@ def check_dependencies():
                     stderr=subprocess.PIPE,
                 )
                 stdout, stderr = process.communicate()
-                
+
                 # 解码字节数据为字符串
                 stdout = stdout.decode('utf-8')
                 stderr = stderr.decode('utf-8')
-                
+
                 # 解析pip list的输出，只获取包名
                 installed_packages = {
-                    line.split()[0].lower() 
-                    for line in stdout.split('\n')[2:] 
+                    line.split()[0].lower()
+                    for line in stdout.split('\n')[2:]
                     if line.strip()
                 }
-                
+
                 logger.debug(f"已安装的包: {installed_packages}")
-                
+
                 # 读取requirements.txt，只获取有效的包名
                 with open(requirements_path, 'r', encoding='utf-8') as f:
                     required_packages = set()
                     for line in f:
                         line = line.strip()
                         # 跳过无效行：空行、注释、镜像源配置、-r 开头的文件包含
-                        if (not line or 
-                            line.startswith('#') or 
-                            line.startswith('-i ') or 
+                        if (not line or
+                            line.startswith('#') or
+                            line.startswith('-i ') or
                             line.startswith('-r ') or
                             line.startswith('--')):
                             continue
-                            
+
                         # 只取包名，忽略版本信息和其他选项
                         pkg = line.split('=')[0].split('>')[0].split('<')[0].split('~')[0].split('[')[0]
                         pkg = pkg.strip().lower()
                         if pkg:  # 确保包名不为空
                             required_packages.add(pkg)
-                
+
                 logger.debug(f"需要的包: {required_packages}")
-                
+
                 # 检查缺失的依赖
                 missing_deps = [
-                    pkg for pkg in required_packages 
+                    pkg for pkg in required_packages
                     if pkg not in installed_packages and not (
                         pkg == 'wxauto' and 'wxauto-py' in installed_packages
                     )
                 ]
-                
+
                 logger.debug(f"缺失的包: {missing_deps}")
-                
+
                 # 根据是否有缺失依赖设置状态
                 dependencies_status = "complete" if not missing_deps else "incomplete"
-                    
+
             except Exception as e:
                 logger.error(f"检查依赖时出错: {str(e)}")
                 dependencies_status = "error"
         else:
             dependencies_status = "complete" if not has_requirements else "incomplete"
-        
+
         return jsonify({
             'status': 'success',
             'python_version': python_version,
@@ -1228,11 +1268,11 @@ def cleanup_processes():
         if bot_process:
             try:
                 logger.info(f"正在终止机器人进程 (PID: {bot_process.pid})...")
-                
+
                 # 获取进程组
                 parent = psutil.Process(bot_process.pid)
                 children = parent.children(recursive=True)
-                
+
                 # 终止子进程
                 for child in children:
                     try:
@@ -1244,14 +1284,14 @@ def cleanup_processes():
                             child.kill()
                         except Exception as e:
                             logger.error(f"终止子进程 (PID: {child.pid}) 失败: {str(e)}")
-                
+
                 # 终止主进程
                 bot_process.terminate()
-                
+
                 # 等待进程结束
                 try:
                     gone, alive = psutil.wait_procs(children + [parent], timeout=3)
-                    
+
                     # 强制结束仍在运行的进程
                     for p in alive:
                         try:
@@ -1261,26 +1301,26 @@ def cleanup_processes():
                             logger.error(f"强制终止进程 (PID: {p.pid}) 失败: {str(e)}")
                 except Exception as e:
                     logger.error(f"等待进程结束失败: {str(e)}")
-                
+
                 # 如果在Windows上，使用taskkill强制终止进程树
                 if sys.platform.startswith('win'):
                     try:
                         logger.info(f"使用taskkill终止进程树 (PID: {bot_process.pid})...")
-                        subprocess.run(['taskkill', '/F', '/T', '/PID', str(bot_process.pid)], 
+                        subprocess.run(['taskkill', '/F', '/T', '/PID', str(bot_process.pid)],
                                      capture_output=True)
                     except Exception as e:
                         logger.error(f"使用taskkill终止进程失败: {str(e)}")
-                
+
                 bot_process = None
-                
+
             except Exception as e:
                 logger.error(f"清理机器人进程失败: {str(e)}")
-        
+
         # 清理当前进程的所有子进程
         try:
             current_process = psutil.Process()
             children = current_process.children(recursive=True)
-            
+
             for child in children:
                 try:
                     logger.info(f"正在终止子进程 (PID: {child.pid})...")
@@ -1291,7 +1331,7 @@ def cleanup_processes():
                         child.kill()
                     except Exception as e:
                         logger.error(f"终止子进程 (PID: {child.pid}) 失败: {str(e)}")
-            
+
             # 等待所有子进程结束
             gone, alive = psutil.wait_procs(children, timeout=3)
             for p in alive:
@@ -1302,7 +1342,7 @@ def cleanup_processes():
                     logger.error(f"强制终止进程 (PID: {p.pid}) 失败: {str(e)}")
         except Exception as e:
             logger.error(f"清理子进程失败: {str(e)}")
-                
+
     except Exception as e:
         logger.error(f"清理进程失败: {str(e)}")
 
@@ -1334,7 +1374,7 @@ def open_browser(port):
         # 优先使用 localhost
         url = f"http://localhost:{port}"
         webbrowser.open(url)
-    
+
     # 创建新线程来打开浏览器
     threading.Thread(target=_open_browser, daemon=True).start()
 
@@ -1344,20 +1384,20 @@ def create_job_object():
         if sys.platform.startswith('win'):
             # 创建作业对象
             job_object = win32job.CreateJobObject(None, "KouriChatBotJob")
-            
+
             # 设置作业对象的扩展限制信息
             info = win32job.QueryInformationJobObject(
                 job_object, win32job.JobObjectExtendedLimitInformation
             )
-            
+
             # 设置当所有进程句柄关闭时终止作业
             info['BasicLimitInformation']['LimitFlags'] = win32job.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-            
+
             # 应用设置
             win32job.SetInformationJobObject(
                 job_object, win32job.JobObjectExtendedLimitInformation, info
             )
-            
+
             try:
                 # 将当前进程添加到作业对象
                 current_process = win32process.GetCurrentProcess()
@@ -1370,7 +1410,7 @@ def create_job_object():
                     return True
                 else:
                     raise  # 重新抛出其他类型的错误
-            
+
             return True
     except Exception as e:
         logger.error(f"创建作业对象失败: {str(e)}")
@@ -1386,7 +1426,7 @@ def setup_console_control_handler():
                     cleanup_processes()
                     return True
                 return False
-                
+
             win32api.SetConsoleCtrlHandler(handler, True)
             logger.info("已设置控制台关闭事件处理器")
     except Exception as e:
@@ -1395,28 +1435,28 @@ def setup_console_control_handler():
 def main():
     """主函数"""
     from src.config import config
-    
+
     # 设置系统编码为 UTF-8 (不清除控制台输出)
     if sys.platform.startswith('win'):
         os.system("@chcp 65001 >nul")  # 使用 >nul 来隐藏输出而不清屏
-    
+
     print("\n" + "="*50)
     print_status("配置管理系统启动中...", "info", "LAUNCH")
     print("-"*50)
-    
+
     # 创建作业对象来管理子进程
     create_job_object()
-    
+
     # 设置控制台关闭事件处理
     setup_console_control_handler()
-    
+
     # 检查必要目录
     print_status("检查系统目录...", "info", "FILE")
     if not os.path.exists(os.path.join(ROOT_DIR, 'src/webui/templates')):
         print_status("错误：模板目录不存在！", "error", "CROSS")
         return
     print_status("系统目录检查完成", "success", "CHECK")
-    
+
     # 检查配置文件
     print_status("检查配置文件...", "info", "CONFIG")
     if not os.path.exists(config.config_path):
@@ -1431,10 +1471,10 @@ def main():
             setattr(cli, 'show_server_banner', lambda *x: None)  # 禁用 Flask 启动横幅
     except (KeyError, AttributeError):
         pass
-    
+
     host = '0.0.0.0'
     port = 8502
-    
+
     print_status("正在启动Web服务...", "info", "INTERNET")
     print("-"*50)
     print_status("配置管理系统已就绪！", "success", "STAR_1")
@@ -1443,7 +1483,7 @@ def main():
     print_status("可通过以下地址访问:", "info", "CHAIN")
     print(f"  Local:   http://localhost:{port}")
     print(f"  Local:   http://127.0.0.1:{port}")
-    
+
     # 获取本地IP地址
     hostname = socket.gethostname()
     try:
@@ -1454,15 +1494,15 @@ def main():
                 print(f"  Network: http://{ip}:{port}")
     except Exception as e:
         logger.error(f"获取IP地址失败: {str(e)}")
-        
+
     print("="*50 + "\n")
-    
+
     # 启动浏览器
     open_browser(port)
-    
+
     app.run(
-        host=host, 
-        port=port, 
+        host=host,
+        port=port,
         debug=True,
         use_reloader=False  # 禁用重载器以避免创建多余的进程
     )
@@ -1472,36 +1512,36 @@ def install_dependencies():
     """安装依赖"""
     try:
         output = []
-        
+
         # 安装依赖
         output.append("正在安装依赖，请耐心等待...")
         requirements_path = os.path.join(ROOT_DIR, 'requirements.txt')
-        
+
         if not os.path.exists(requirements_path):
             return jsonify({
                 'status': 'error',
                 'message': '找不到requirements.txt文件'
             })
-            
+
         process = subprocess.Popen(
             [sys.executable, '-m', 'pip', 'install', '-r', requirements_path],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
         stdout, stderr = process.communicate()
-        
+
         # 解码字节数据为字符串
         stdout = stdout.decode('utf-8')
         stderr = stderr.decode('utf-8')
-        
+
         output.append(stdout if stdout else stderr)
-        
+
         # 检查是否有实际错误，而不是"already satisfied"消息
         has_error = process.returncode != 0 and not any(
-            msg in (stdout + stderr).lower() 
+            msg in (stdout + stderr).lower()
             for msg in ['already satisfied', 'successfully installed']
         )
-        
+
         if not has_error:
             return jsonify({
                 'status': 'success',
@@ -1513,7 +1553,7 @@ def install_dependencies():
                 'output': '\n'.join(output),
                 'message': '安装依赖失败'
             })
-            
+
     except Exception as e:
         return jsonify({
             'status': 'error',
@@ -1530,9 +1570,9 @@ def is_local_network() -> bool:
     if client_ip is None:
         return True
     return (
-        client_ip == '127.0.0.1' or 
-        client_ip.startswith('192.168.') or 
-        client_ip.startswith('10.') or 
+        client_ip == '127.0.0.1' or
+        client_ip.startswith('192.168.') or
+        client_ip.startswith('10.') or
         client_ip.startswith('172.16.')
     )
 
@@ -1543,17 +1583,17 @@ def check_auth():
     public_routes = ['login', 'static', 'init_password']
     if request.endpoint in public_routes:
         return
-        
+
     # 检查是否需要初始化密码
     from src.config import config
     if not config.auth.admin_password:
         return redirect(url_for('init_password'))
-        
+
     # 如果是本地网络访问，自动登录
     if is_local_network():
         session['logged_in'] = True
         return
-        
+
     if not session.get('logged_in'):
         return redirect(url_for('login'))
 
@@ -1561,28 +1601,28 @@ def check_auth():
 def login():
     # 处理登录请求
     from src.config import config
-    
+
     # 首先检查是否需要初始化密码
     if not config.auth.admin_password:
         return redirect(url_for('init_password'))
-    
+
     if request.method == 'GET':
         # 如果已经登录，直接跳转到仪表盘
         if session.get('logged_in'):
             return redirect(url_for('dashboard'))
-            
+
         # 如果是本地网络访问，自动登录并重定向到仪表盘
         if is_local_network():
             session['logged_in'] = True
             return redirect(url_for('dashboard'))
-            
+
         return render_template('login.html')
-    
+
     # POST请求处理
     data = request.get_json()
     password = data.get('password')
     remember_me = data.get('remember_me', False)
-    
+
     # 正常登录验证
     stored_hash = config.auth.admin_password
     if hash_password(password) == stored_hash:
@@ -1592,7 +1632,7 @@ def login():
             session.permanent = True
             app.permanent_session_lifetime = timedelta(days=30)
         return jsonify({'status': 'success'})
-    
+
     return jsonify({
         'status': 'error',
         'message': '密码错误'
@@ -1602,13 +1642,13 @@ def login():
 def init_password():
     # 初始化管理员密码页面
     from src.config import config
-    
+
     if request.method == 'GET':
         # 如果已经设置了密码，重定向到登录页面
         if config.auth.admin_password:
             return redirect(url_for('login'))
         return render_template('init_password.html')
-        
+
     # POST请求处理
     try:
         data = request.get_json()
@@ -1617,40 +1657,40 @@ def init_password():
                 'status': 'error',
                 'message': '无效的请求数据'
             })
-            
+
         password = data.get('password')
-        
+
         # 再次检查是否已经设置了密码
         if config.auth.admin_password:
             return jsonify({
                 'status': 'error',
                 'message': '密码已经设置'
             })
-        
+
         # 保存新密码的哈希值
         hashed_password = hash_password(password)
         if config.update_password(hashed_password):
             # 重新加载配置
             importlib.reload(sys.modules['src.config'])
             from src.config import config
-            
+
             # 验证密码是否正确保存
             if not config.auth.admin_password:
                 return jsonify({
                     'status': 'error',
                     'message': '密码保存失败'
                 })
-            
+
             # 设置登录状态
             session.clear()
             session['logged_in'] = True
             return jsonify({'status': 'success'})
-        
+
         return jsonify({
             'status': 'error',
             'message': '保存密码失败'
         })
-        
+
     except Exception as e:
         logger.error(f"初始化密码失败: {str(e)}")
         return jsonify({
@@ -1668,29 +1708,40 @@ def logout():
 def get_model_configs():
     """获取模型和API配置"""
     try:
-        models_path = os.path.join(ROOT_DIR, 'src/config/models.json')
-        
-        if not os.path.exists(models_path):
-            return jsonify({
-                'status': 'error',
-                'message': '配置文件不存在'
-            })
+        # 先尝试从云端获取模型列表
+        from src.autoupdate.updater import check_cloud_info
+        cloud_info = check_cloud_info()
 
-        with open(models_path, 'r', encoding='utf-8') as f:
-            configs = json.load(f)
+        # 如果云端获取成功，使用云端模型列表
+        if cloud_info['models']:
+            configs = cloud_info['models']
+            logger.info("使用云端模型列表")
+        else:
+            # 如果云端获取失败，使用本地模型列表
+            models_path = os.path.join(ROOT_DIR, 'src/autoupdate/cloud/models.json')
+
+            if not os.path.exists(models_path):
+                return jsonify({
+                    'status': 'error',
+                    'message': '配置文件不存在'
+                })
+
+            with open(models_path, 'r', encoding='utf-8') as f:
+                configs = json.load(f)
+            logger.info("使用本地模型列表")
 
 
         # 过滤和排序提供商
-        active_providers = [p for p in configs['api_providers'] 
+        active_providers = [p for p in configs['api_providers']
                           if p.get('status') == 'active']
         active_providers.sort(key=lambda x: x.get('priority', 999))
-        
+
         # 构建返回配置
         return_configs = {
             'api_providers': active_providers,
             'models': {}
         }
-        
+
         # 只包含活动模型
         for provider in active_providers:
             provider_id = provider['id']
@@ -1701,7 +1752,7 @@ def get_model_configs():
                 ]
 
         return jsonify(return_configs)
-        
+
     except Exception as e:
         return jsonify({
             'status': 'error',
@@ -1714,7 +1765,7 @@ def save_quick_setup():
     try:
         new_config = request.json or {}
         from src.config import config
-        
+
         # 读取当前配置
         config_path = os.path.join(ROOT_DIR, 'src/config/config.json')
         try:
@@ -1722,11 +1773,11 @@ def save_quick_setup():
                 current_config = json.load(f)
         except:
             current_config = {"categories": {}}
-            
+
         # 确保基本结构存在
         if "categories" not in current_config:
             current_config["categories"] = {}
-            
+
         # 更新用户设置
         if "listen_list" in new_config:
             if "user_settings" not in current_config["categories"]:
@@ -1739,7 +1790,7 @@ def save_quick_setup():
                 "type": "array",
                 "description": "要监听的用户列表（请使用微信昵称，不要使用备注名）"
             }
-            
+
         # 更新API设置
         if "api_key" in new_config:
             if "llm_settings" not in current_config["categories"]:
@@ -1753,7 +1804,7 @@ def save_quick_setup():
                 "description": "API密钥",
                 "is_secret": True
             }
-            
+
             # 如果没有设置其他必要的LLM配置，设置默认值
             if "base_url" not in current_config["categories"]["llm_settings"]["settings"]:
                 current_config["categories"]["llm_settings"]["settings"]["base_url"] = {
@@ -1779,16 +1830,16 @@ def save_quick_setup():
                     "type": "number",
                     "description": "温度参数"
                 }
-        
+
         # 保存更新后的配置
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(current_config, f, ensure_ascii=False, indent=4)
-            
+
         # 重新加载配置
         importlib.reload(sys.modules['src.config'])
-        
+
         return jsonify({"status": "success", "message": "设置已保存"})
-            
+
     except Exception as e:
         logger.error(f"保存快速设置失败: {str(e)}")
         return jsonify({"status": "error", "message": str(e)})
@@ -1805,7 +1856,7 @@ def get_available_avatars_route():
     try:
         # 使用绝对路径
         avatar_base_dir = os.path.join(ROOT_DIR, "data", "avatars")
-        
+
         # 检查目录是否存在
         if not os.path.exists(avatar_base_dir):
             # 尝试创建目录
@@ -1818,7 +1869,7 @@ def get_available_avatars_route():
                     'status': 'error',
                     'message': f"人设目录不存在且无法创建: {str(e)}"
                 })
-        
+
         # 获取所有包含 avatar.md 和 emojis 目录的有效人设目录
         avatars = []
         for item in os.listdir(avatar_base_dir):
@@ -1826,12 +1877,12 @@ def get_available_avatars_route():
             if os.path.isdir(avatar_dir):
                 avatar_md_path = os.path.join(avatar_dir, "avatar.md")
                 emojis_dir = os.path.join(avatar_dir, "emojis")
-                
+
                 # 检查 avatar.md 文件
                 if not os.path.exists(avatar_md_path):
                     logger.warning(f"人设 {item} 缺少 avatar.md 文件")
                     continue
-                
+
                 # 检查 emojis 目录
                 if not os.path.exists(emojis_dir):
                     logger.warning(f"人设 {item} 缺少 emojis 目录")
@@ -1841,11 +1892,11 @@ def get_available_avatars_route():
                     except Exception as e:
                         logger.error(f"为人设 {item} 创建 emojis 目录失败: {str(e)}")
                         continue
-                
+
                 avatars.append(f"data/avatars/{item}")
-        
+
         logger.info(f"找到 {len(avatars)} 个有效人设: {avatars}")
-        
+
         return jsonify({
             'status': 'success',
             'avatars': avatars
@@ -1864,19 +1915,19 @@ def load_avatar_content():
     try:
         avatar_name = request.args.get('avatar', 'MONO')
         avatar_path = os.path.join(ROOT_DIR, 'data', 'avatars', avatar_name, 'avatar.md')
-        
+
         # 确保目录存在
         os.makedirs(os.path.dirname(avatar_path), exist_ok=True)
-        
+
         # 如果文件不存在，创建一个空文件
         if not os.path.exists(avatar_path):
             with open(avatar_path, 'w', encoding='utf-8') as f:
                 f.write("# Task\n请在此输入任务描述\n\n# Role\n请在此输入角色设定\n\n# Appearance\n请在此输入外表描述\n\n")
-        
+
         # 读取角色设定文件并解析内容
         sections = {}
         current_section = None
-        
+
         with open(avatar_path, 'r', encoding='utf-8') as file:
             content = ""
             for line in file:
@@ -1889,15 +1940,15 @@ def load_avatar_content():
                     content = ""
                 else:
                     content += line
-            
+
             # 保存最后一个部分
             if current_section:
                 sections[current_section.lower()] = content.strip()
-        
+
         # 获取原始文件内容，用于前端显示
         with open(avatar_path, 'r', encoding='utf-8') as file:
             raw_content = file.read()
-        
+
         return jsonify({
             'status': 'success',
             'content': sections,
@@ -1915,12 +1966,12 @@ def get_tasks():
     """获取定时任务列表"""
     try:
         config_data = load_config_file()
-        
+
         tasks = []
         if 'categories' in config_data and 'schedule_settings' in config_data['categories']:
             if 'settings' in config_data['categories']['schedule_settings'] and 'tasks' in config_data['categories']['schedule_settings']['settings']:
                 tasks = config_data['categories']['schedule_settings']['settings']['tasks'].get('value', [])
-        
+
         return jsonify({
             'status': 'success',
             'tasks': tasks
@@ -1937,7 +1988,7 @@ def save_task():
     """保存单个定时任务"""
     try:
         task_data = request.json
-        
+
         # 验证必要字段
         required_fields = ['task_id', 'chat_id', 'content', 'schedule_type', 'schedule_time']
         for field in required_fields:
@@ -1946,14 +1997,14 @@ def save_task():
                     'status': 'error',
                     'message': f'缺少必要字段: {field}'
                 })
-        
+
         # 读取配置
         config_data = load_config_file()
-        
+
         # 确保必要的配置结构存在
         if 'categories' not in config_data:
             config_data['categories'] = {}
-        
+
         if 'schedule_settings' not in config_data['categories']:
             config_data['categories']['schedule_settings'] = {
                 'title': '定时任务配置',
@@ -1979,36 +2030,36 @@ def save_task():
                 'type': 'array',
                 'description': '定时任务列表'
             }
-        
+
         # 获取当前任务列表
         tasks = config_data['categories']['schedule_settings']['settings']['tasks']['value']
-        
+
         # 检查是否存在相同ID的任务
         task_index = None
         for i, task in enumerate(tasks):
             if task.get('task_id') == task_data['task_id']:
                 task_index = i
                 break
-        
+
         # 更新或添加任务
         if task_index is not None:
             tasks[task_index] = task_data
         else:
             tasks.append(task_data)
-        
+
         # 更新配置
         config_data['categories']['schedule_settings']['settings']['tasks']['value'] = tasks
-        
+
         # 保存配置
         if not save_config_file(config_data):
             return jsonify({
                 'status': 'error',
                 'message': '保存配置文件失败'
             }), 500
-        
+
         # 重新初始化定时任务
         reinitialize_tasks()
-        
+
         return jsonify({
             'status': 'success',
             'message': '任务已保存'
@@ -2026,42 +2077,42 @@ def delete_task():
     try:
         data = request.json
         task_id = data.get('task_id')
-        
+
         if not task_id:
             return jsonify({
                 'status': 'error',
                 'message': '未提供任务ID'
             })
-        
+
         # 读取配置
         config_data = load_config_file()
-        
+
         # 获取任务列表
         if 'categories' in config_data and 'schedule_settings' in config_data['categories']:
             if 'settings' in config_data['categories']['schedule_settings'] and 'tasks' in config_data['categories']['schedule_settings']['settings']:
                 tasks = config_data['categories']['schedule_settings']['settings']['tasks']['value']
-                
+
                 # 查找并删除任务
                 new_tasks = [task for task in tasks if task.get('task_id') != task_id]
-                
+
                 # 更新配置
                 config_data['categories']['schedule_settings']['settings']['tasks']['value'] = new_tasks
-                
+
                 # 保存配置
                 if not save_config_file(config_data):
                     return jsonify({
                         'status': 'error',
                         'message': '保存配置文件失败'
                     }), 500
-                
+
                 # 重新初始化定时任务
                 reinitialize_tasks()
-                
+
                 return jsonify({
                     'status': 'success',
                     'message': '任务已删除'
                 })
-        
+
         return jsonify({
             'status': 'error',
             'message': '找不到任务配置'
@@ -2081,11 +2132,11 @@ def get_all_configs():
         config_path = os.path.join(ROOT_DIR, 'src/config/config.json')
         with open(config_path, 'r', encoding='utf-8') as f:
             config_data = json.load(f)
-        
+
         # 解析配置数据为前端需要的格式
         configs = {}
         tasks = []
-        
+
         # 处理用户设置
         if 'categories' in config_data:
             # 用户设置
@@ -2093,7 +2144,7 @@ def get_all_configs():
                 configs['基础配置'] = {}
                 if 'listen_list' in config_data['categories']['user_settings']['settings']:
                     configs['基础配置']['LISTEN_LIST'] = config_data['categories']['user_settings']['settings']['listen_list']
-            
+
             # LLM设置
             if 'llm_settings' in config_data['categories'] and 'settings' in config_data['categories']['llm_settings']:
                 llm_settings = config_data['categories']['llm_settings']['settings']
@@ -2107,11 +2158,11 @@ def get_all_configs():
                     configs['基础配置']['MAX_TOKEN'] = llm_settings['max_tokens']
                 if 'temperature' in llm_settings:
                     configs['基础配置']['TEMPERATURE'] = llm_settings['temperature']
-            
+
             # 媒体设置
             if 'media_settings' in config_data['categories'] and 'settings' in config_data['categories']['media_settings']:
                 media_settings = config_data['categories']['media_settings']['settings']
-                
+
                 # 图像识别设置
                 configs['图像识别API配置'] = {}
                 if 'image_recognition' in media_settings:
@@ -2125,7 +2176,11 @@ def get_all_configs():
                         configs['图像识别API配置']['VISION_TEMPERATURE'] = img_recog['temperature']
                     if 'model' in img_recog:
                         configs['图像识别API配置']['VISION_MODEL'] = img_recog['model']
-                
+                    if 'top_p' in img_recog:
+                        configs['图像识别API配置']['VISION_TOP_P'] = img_recog['top_p']
+                    if 'frequency_penalty' in img_recog:
+                        configs['图像识别API配置']['VISION_FREQUENCY_PENALTY'] = img_recog['frequency_penalty']
+
                 # 图像生成设置
                 '''
                 configs['图像生成配置'] = {}
@@ -2136,7 +2191,7 @@ def get_all_configs():
                     if 'temp_dir' in img_gen:
                         configs['图像生成配置']['TEMP_IMAGE_DIR'] = {'value': img_gen['temp_dir'].get('value', '')}
                 '''
-                
+
                 # 语音设置
                 '''
                 configs['语音配置'] = {}
@@ -2147,11 +2202,11 @@ def get_all_configs():
                     if 'voice_dir' in tts:
                         configs['语音配置']['VOICE_DIR'] = {'value': tts['voice_dir'].get('value', '')}
                 '''
-            
+
             # 行为设置
             if 'behavior_settings' in config_data['categories'] and 'settings' in config_data['categories']['behavior_settings']:
                 behavior = config_data['categories']['behavior_settings']['settings']
-                
+
                 # 主动消息配置
                 configs['主动消息配置'] = {}
                 if 'auto_message' in behavior:
@@ -2163,21 +2218,21 @@ def get_all_configs():
                             configs['主动消息配置']['MIN_COUNTDOWN_HOURS'] = auto_msg['countdown']['min_hours']
                         if 'max_hours' in auto_msg['countdown']:
                             configs['主动消息配置']['MAX_COUNTDOWN_HOURS'] = auto_msg['countdown']['max_hours']
-                
+
                 if 'quiet_time' in behavior:
                     quiet = behavior['quiet_time']
                     if 'start' in quiet:
                         configs['主动消息配置']['QUIET_TIME_START'] = quiet['start']
                     if 'end' in quiet:
                         configs['主动消息配置']['QUIET_TIME_END'] = quiet['end']
-                
+
                 # 消息队列配置
                 configs['消息配置'] = {}
                 if 'message_queue' in behavior:
                     msg_queue = behavior['message_queue']
                     if 'timeout' in msg_queue:
                         configs['消息配置']['QUEUE_TIMEOUT'] = msg_queue['timeout']
-                
+
                 # Prompt配置
                 configs['Prompt配置'] = {}
                 if 'context' in behavior:
@@ -2186,15 +2241,15 @@ def get_all_configs():
                         configs['Prompt配置']['MAX_GROUPS'] = context['max_groups']
                     if 'avatar_dir' in context:
                         configs['Prompt配置']['AVATAR_DIR'] = context['avatar_dir']
-            
+
             # 定时任务
             if 'schedule_settings' in config_data['categories'] and 'settings' in config_data['categories']['schedule_settings']:
                 if 'tasks' in config_data['categories']['schedule_settings']['settings']:
                     tasks = config_data['categories']['schedule_settings']['settings']['tasks'].get('value', [])
-        
+
         logger.debug(f"获取到的所有配置数据: {configs}")
         logger.debug(f"获取到的任务数据: {tasks}")
-        
+
         return jsonify({
             'status': 'success',
             'configs': configs,
@@ -2210,61 +2265,80 @@ def get_all_configs():
 @app.route('/get_announcement')
 def get_announcement():
     try:
-        # 使用全局定义的模板文件路径
-        announcement_file = ANNOUNCEMENT_CONFIG_PATH
-        
-        # 公告文件不存在时，直接返回一个空公告，不创建文件
-        if not os.path.exists(announcement_file):
-            return jsonify({
-                'enabled': False,
-                'title': '系统公告',
-                'content': ''
-            })
-        
-        # 读取公告文件
-        with open(announcement_file, 'r', encoding='utf-8') as f:
-            announcement = json.load(f)
-        
-        # 读取version.json文件内容并添加到公告中
-        version_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'version.json')
-        if os.path.exists(version_file):
+        # 默认公告内容
+        local_announcement = {
+            'enabled': True,
+            'title': '系统公告',
+            'content': '欢迎使用KouriChat！'
+        }
+
+        # 使用updater模块从云端获取公告和版本信息
+        from src.autoupdate.updater import check_cloud_info
+        cloud_info = check_cloud_info()
+
+        # 如果云端获取失败，尝试从本地读取公告
+        if not cloud_info['announcement'] and os.path.exists(ANNOUNCEMENT_CONFIG_PATH):
             try:
-                with open(version_file, 'r', encoding='utf-8') as f:
-                    version_info = json.load(f)
-                
-                # 获取版本信息
-                version = version_info.get('version', '未知')
-                last_update = version_info.get('last_update', '未知')
-                description = version_info.get('description', [])
-                
-                # 将版本信息添加到公告内容中
-                version_html = f"""
-                <div class="mt-4 pt-3 border-top">
-                    <h5 class="mb-3">当前版本信息</h5>
-                    <p><strong>版本号:</strong> {version}</p>
-                    <p><strong>更新日期:</strong> {last_update}</p>
-                    <p><strong>更新内容:</strong></p>
-                """
-                
-                if isinstance(description, list):
-                    version_html += "<ul class='ps-3'>"
-                    for item in description:
-                        version_html += f"<li>{item}</li>"
-                    version_html += "</ul>"
-                else:
-                    version_html += f"<p>{description}</p>"
-                
-                version_html += "</div>"
-                
-                # 将版本信息附加到原有公告内容
-                # 简单地附加版本信息，无论是HTML还是纯文本
-                announcement['content'] += version_html
+                with open(ANNOUNCEMENT_CONFIG_PATH, 'r', encoding='utf-8') as f:
+                    local_announcement = json.load(f)
+                logger.info("从本地读取公告信息成功")
             except Exception as e:
-                print(f"获取版本信息时发生错误: {e}")
-            
-        return jsonify(announcement)
+                logger.error(f"读取本地公告文件失败: {e}")
+        elif cloud_info['announcement']:
+            # 使用云端公告
+            local_announcement = cloud_info['announcement']
+            logger.info("使用云端公告信息")
+
+        # 如果云端获取失败，尝试从本地读取版本信息
+        version_info = cloud_info['version']
+        if not version_info and os.path.exists(VERSION_CONFIG_PATH):
+            try:
+                with open(VERSION_CONFIG_PATH, 'r', encoding='utf-8') as f:
+                    version_info = json.load(f)
+                logger.info("从本地读取版本信息成功")
+            except Exception as e:
+                logger.error(f"读取本地版本信息失败: {e}")
+
+        # 如果成功获取版本信息，将其添加到公告中
+        if version_info:
+            # 获取版本信息
+            version = version_info.get('version', '未知')
+            last_update = version_info.get('last_update', '未知')
+            description = version_info.get('description', [])
+
+            # 如果云端版本信息包含公告，使用云端公告
+            if 'announcement' in version_info:
+                cloud_announcement = version_info.get('announcement', {})
+                if cloud_announcement:
+                    local_announcement['title'] = cloud_announcement.get('title', local_announcement['title'])
+                    local_announcement['content'] = cloud_announcement.get('content', local_announcement['content'])
+                    local_announcement['enabled'] = cloud_announcement.get('enabled', local_announcement['enabled'])
+
+            # 将版本信息添加到公告内容中
+            version_html = f"""
+            <div class="mt-4 pt-3 border-top">
+                <h5 class="mb-3">当前版本信息</h5>
+                <p><strong>版本号:</strong> {version}</p>
+                <p><strong>更新日期:</strong> {last_update}</p>
+                <p><strong>更新内容:</strong></p>
+            """
+
+            if isinstance(description, list):
+                version_html += "<ul class='ps-3'>"
+                for item in description:
+                    version_html += f"<li>{item}</li>"
+                version_html += "</ul>"
+            else:
+                version_html += f"<p>{description}</p>"
+
+            version_html += "</div>"
+
+            # 将版本信息附加到公告内容
+            local_announcement['content'] += version_html
+
+        return jsonify(local_announcement)
     except Exception as e:
-        print(f"获取公告时发生错误: {e}")
+        logger.error(f"获取公告时发生错误: {e}")
         return jsonify({
             'enabled': False,
             'title': '公告读取失败',
@@ -2276,16 +2350,16 @@ def reconnect_wechat():
     try:
         # 导入微信登录点击器
         from src.Wechat_Login_Clicker.Wechat_Login_Clicker import click_wechat_buttons
-        
+
         # 执行点击操作
         result = click_wechat_buttons()
-        
+
         if result is False:
             return jsonify({
                 'status': 'error',
                 'message': '找不到微信登录窗口'
             })
-        
+
         return jsonify({
             'status': 'success',
             'message': '微信重连操作已执行'
@@ -2327,7 +2401,7 @@ def get_vision_api_configs():
                 "priority": 3
             },
         ]
-        
+
         # 构建模型配置 - 只包含支持图像识别的模型
         vision_models = {
             "kourichat-asia": [
@@ -2339,7 +2413,7 @@ def get_vision_api_configs():
                 {"id": "moonshot-v1-8k-vision-preview", "name": "moonshot-v1-8k-vision-preview"}
             ]
         }
-        
+
         return jsonify({
             "status": "success",
             "api_providers": vision_providers,

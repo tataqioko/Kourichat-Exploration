@@ -27,7 +27,7 @@ class EmojiHandler:
         # 支持的表情类型
         self.emotion_types = [
     'happy', 'sad', 'angry', 'neutral', 'love', 'funny', 'cute', 'bored', 'shy', 
-    'embarrassed', 'sleepy', 'lonely', 'hungry', '', 'surprise', 'confused', 
+    'embarrassed', 'sleepy', 'lonely', 'hungry', 'confort', 'surprise', 'confused', 
     'playful', 'excited', 'tease', 'hot', 'speechless', 'scared', 'emo_1', 
     'emo_2', 'emo_3', 'emo_4', 'emo_5', 'afraid', 'amused', 'anxious', 
     'confident', 'cold', 'suspicious', 'loving', 'curious', 'envious', 

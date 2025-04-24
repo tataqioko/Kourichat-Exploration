@@ -57,7 +57,7 @@ class ChatBot:
         self.image_recognition_service = image_recognition_service
         self.auto_sender = auto_sender
         self.emoji_handler = emoji_handler
-        
+
         # 获取机器人的微信名称
         self.wx = WeChat()
         self.robot_name = self.wx.A_MyIcon.Name  # 使用Name属性而非方法
@@ -67,22 +67,22 @@ class ChatBot:
         try:
             username = msg.sender
             content = getattr(msg, 'content', None) or getattr(msg, 'text', None)
-            
+
             # 重置倒计时
             self.auto_sender.start_countdown()
-            
+
             # 简化日志输出
             logger.info(f"收到消息 - 来自: {username}" + (" (群聊)" if is_group else ""))
             logger.debug(f"消息内容: {content}")
-            
+
             img_path = None
             is_emoji = False
             is_image_recognition = False
-            
+
             # 处理群聊@消息
             if is_group and self.robot_name and content:
                 content = re.sub(f'@{self.robot_name}\u2005', '', content).strip()
-            
+
             if content and content.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
                 img_path = content
                 is_emoji = False
@@ -145,7 +145,9 @@ image_recognition_service = ImageRecognitionService(
     api_key=config.media.image_recognition.api_key,
     base_url=config.media.image_recognition.base_url,
     temperature=config.media.image_recognition.temperature,
-    model=config.media.image_recognition.model
+    model=config.media.image_recognition.model,
+    top_p=getattr(config.media.image_recognition, 'top_p', 0.95),
+    frequency_penalty=getattr(config.media.image_recognition, 'frequency_penalty', 0.2)
 )
 
 # 获取机器人名称
@@ -182,32 +184,32 @@ def message_listener():
     wx = None
     last_window_check = 0
     check_interval = 600
-    
+
     while not stop_event.is_set():
         try:
             current_time = time.time()
-            
+
             if wx is None or (current_time - last_window_check > check_interval):
                 wx = WeChat()
                 if not wx.GetSessionList():
                     time.sleep(5)
                     continue
                 last_window_check = current_time
-            
+
             msgs = wx.GetListenMessage()
             if not msgs:
                 time.sleep(wait)
                 continue
-                
+
             for chat in msgs:
                 who = chat.who
                 if not who:
                     continue
-                    
+
                 one_msgs = msgs.get(chat)
                 if not one_msgs:
                     continue
-                    
+
                 for msg in one_msgs:
                     try:
                         msgtype = msg.type
@@ -216,20 +218,20 @@ def message_listener():
                             continue
                         if msgtype != 'friend':
                             logger.debug(f"非好友消息，忽略! 消息类型: {msgtype}")
-                            continue  
+                            continue
                             # 接收窗口名跟发送人一样，代表是私聊，否则是群聊
                         if who == msg.sender:
 
                             chat_bot.handle_wxauto_message(msg, msg.sender) # 处理私聊信息
-                        elif ROBOT_WX_NAME != '' and (bool(re.search(f'@{ROBOT_WX_NAME}\u2005', msg.content)) or bool(re.search(f'{ROBOT_WX_NAME}\u2005', msg.content))): 
+                        elif ROBOT_WX_NAME != '' and (bool(re.search(f'@{ROBOT_WX_NAME}\u2005', msg.content)) or bool(re.search(f'{ROBOT_WX_NAME}\u2005', msg.content))):
                             # 修改：在群聊被@时或者被叫名字，传入群聊ID(who)作为回复目标
-                            chat_bot.handle_wxauto_message(msg, who, is_group=True) 
+                            chat_bot.handle_wxauto_message(msg, who, is_group=True)
                         else:
-                            logger.debug(f"非需要处理消息，可能是群聊非@消息: {content}")   
+                            logger.debug(f"非需要处理消息，可能是群聊非@消息: {content}")
                     except Exception as e:
                         logger.debug(f"处理单条消息失败: {str(e)}")
                         continue
-                        
+
         except Exception as e:
             logger.debug(f"消息监听出错: {str(e)}")
             wx = None
@@ -241,7 +243,7 @@ def initialize_wx_listener():
     """
     max_retries = 3
     retry_delay = 2  # 秒
-    
+
     for attempt in range(max_retries):
         try:
             wx = WeChat()
@@ -249,7 +251,7 @@ def initialize_wx_listener():
                 logger.error("未检测到微信会话列表，请确保微信已登录")
                 time.sleep(retry_delay)
                 continue
-                
+
             # 循环添加监听对象，修改savepic参数为False
             for chat_name in listen_list:
                 try:
@@ -257,7 +259,7 @@ def initialize_wx_listener():
                     if not wx.ChatWith(chat_name):
                         logger.error(f"找不到会话: {chat_name}")
                         continue
-                        
+
                     # 尝试添加监听，设置savepic=False
                     wx.AddListenChat(who=chat_name, savepic=True)
                     logger.info(f"成功添加监听: {chat_name}")
@@ -265,31 +267,31 @@ def initialize_wx_listener():
                 except Exception as e:
                     logger.error(f"添加监听失败 {chat_name}: {str(e)}")
                     continue
-                    
+
             return wx
-            
+
         except Exception as e:
             logger.error(f"初始化微信失败 (尝试 {attempt + 1}/{max_retries}): {str(e)}")
             if attempt < max_retries - 1:
                 time.sleep(retry_delay)
             else:
                 raise Exception("微信初始化失败，请检查微信是否正常运行")
-    
+
     return None
 
 def initialize_auto_tasks(message_handler):
     """初始化自动任务系统"""
     print_status("初始化自动任务系统...", "info", "CLOCK")
-    
+
     try:
         # 创建AutoTasker实例
         auto_tasker = AutoTasker(message_handler)
         print_status("创建AutoTasker实例成功", "success", "CHECK")
-        
+
         # 清空现有任务
         auto_tasker.scheduler.remove_all_jobs()
         print_status("清空现有任务", "info", "CLEAN")
-        
+
         # 从配置文件读取任务信息
         if hasattr(config, 'behavior') and hasattr(config.behavior, 'schedule_settings'):
             schedule_settings = config.behavior.schedule_settings
@@ -298,7 +300,7 @@ def initialize_auto_tasks(message_handler):
                 if tasks:
                     print_status(f"从配置文件读取到 {len(tasks)} 个任务", "info", "TASK")
                     tasks_added = 0
-                    
+
                     # 遍历所有任务并添加
                     for task in tasks:
                         try:
@@ -314,16 +316,16 @@ def initialize_auto_tasks(message_handler):
                             print_status(f"成功添加任务 {task.task_id}: {task.content}", "success", "CHECK")
                         except Exception as e:
                             print_status(f"添加任务 {task.task_id} 失败: {str(e)}", "error", "ERROR")
-                    
+
                     print_status(f"成功添加 {tasks_added}/{len(tasks)} 个任务", "info", "TASK")
                 else:
                     print_status("配置文件中没有找到任务", "warning", "WARNING")
         else:
             print_status("未找到任务配置信息", "warning", "WARNING")
             print_status(f"当前 behavior 属性: {dir(config.behavior)}", "info", "INFO")
-        
+
         return auto_tasker
-        
+
     except Exception as e:
         print_status(f"初始化自动任务系统失败: {str(e)}", "error", "ERROR")
         logger.error(f"初始化自动任务系统失败: {str(e)}")
@@ -332,11 +334,11 @@ def initialize_auto_tasks(message_handler):
 def switch_avatar(new_avatar_name):
     # 更新配置
     config.behavior.context.avatar_dir = f"avatars/{new_avatar_name}"
-    
+
     # 重新初始化 emoji_handler
     global emoji_handler
     emoji_handler = EmojiHandler(root_dir)
-    
+
     # 更新 message_handler 中的 emoji_handler
     message_handler.emoji_handler = emoji_handler
 
@@ -347,7 +349,7 @@ def main():
         if not os.path.exists(automation_log_dir):
             os.makedirs(automation_log_dir)
         os.environ["WXAUTO_LOG_PATH"] = os.path.join(automation_log_dir, "AutomationLog.txt")
-        
+
         # 初始化微信监听
         print_status("初始化微信监听...", "info", "BOT")
         wx = initialize_wx_listener()
@@ -355,7 +357,7 @@ def main():
             print_status("微信初始化失败，请确保微信已登录并保持在前台运行!", "error", "CROSS")
             return
         print_status("微信监听初始化完成", "success", "CHECK")
-        
+
         # 验证记忆目录
         print_status("验证角色记忆存储路径...", "info", "FILE")
         avatar_dir = os.path.join(root_dir, config.behavior.context.avatar_dir)
@@ -364,10 +366,10 @@ def main():
         if not os.path.exists(memory_dir):
             os.makedirs(memory_dir)
             print_status(f"创建角色记忆目录: {memory_dir}", "success", "CHECK")
-        
+
         # 初始化记忆文件 - 为每个监听用户创建独立的记忆文件
         print_status("初始化记忆文件...", "info", "FILE")
-        
+
         # 为每个监听的用户创建独立记忆
         for user_name in listen_list:
             print_status(f"为用户 '{user_name}' 创建独立记忆...", "info", "USER")
@@ -391,17 +393,17 @@ def main():
         # 初始化主动消息系统
         print_status("初始化主动消息系统...", "info", "CLOCK")
         print_status("主动消息系统已启动", "success", "CHECK")
-        
+
         print("-" * 50)
         print_status("系统初始化完成", "success", "STAR_2")
         print("=" * 50)
-        
+
         # 初始化自动任务系统
         auto_tasker = initialize_auto_tasks(message_handler)
         if not auto_tasker:
             print_status("自动任务系统初始化失败", "error", "ERROR")
             return
-            
+
         # 主循环
         while True:
             time.sleep(1)
@@ -425,17 +427,17 @@ def main():
         # 清理资源
         if 'auto_sender' in locals():
             auto_sender.stop()
-        
+
         # 设置事件以停止线程
         stop_event.set()
-        
+
         # 关闭监听线程
         if listener_thread and listener_thread.is_alive():
             print_status("正在关闭监听线程...", "info", "SYNC")
             listener_thread.join(timeout=2)
             if listener_thread.is_alive():
                 print_status("监听线程未能正常关闭", "warning", "WARNING")
-        
+
         print_status("正在关闭系统...", "warning", "STOP")
         print_status("系统已退出", "info", "BYE")
         print("\n")

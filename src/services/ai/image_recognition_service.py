@@ -17,19 +17,34 @@ import os
 logger = logging.getLogger('main')
 
 class ImageRecognitionService:
-    def __init__(self, api_key: str, base_url: str, temperature: float, model: str):
+    def __init__(self, api_key: str, base_url: str, temperature: float, model: str, top_p: float = 0.95, frequency_penalty: float = 0.2):
         self.api_key = api_key
         self.base_url = base_url
         # 确保 temperature 在有效范围内
         self.temperature = min(max(0.0, temperature), 1.0)  # 限制在 0-1 之间
+        self.top_p = min(max(0.1, top_p), 1.0)  # 限制在 0.1-1 之间
+        self.frequency_penalty = min(max(0.0, frequency_penalty), 2.0)  # 限制在 0-2 之间
+
+        # 使用 Updater 获取版本信息并设置请求头
+        from src.autoupdate.updater import Updater
+        updater = Updater()
+        version = updater.get_current_version()
+        version_identifier = updater.get_version_identifier()
+
         self.headers = {
             'Authorization': f'Bearer {api_key}',
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'User-Agent': version_identifier,
+            'X-KouriChat-Version': version
         }
         self.model = model  # "moonshot-v1-8k-vision-preview"
-        
+
         if temperature > 1.0:
             logger.warning(f"Temperature值 {temperature} 超出范围，已自动调整为 1.0")
+        if top_p < 0.1 or top_p > 1.0:
+            logger.warning(f"Top-p值 {top_p} 超出范围，已自动调整为 {self.top_p}")
+        if frequency_penalty < 0.0 or frequency_penalty > 2.0:
+            logger.warning(f"Frequency Penalty值 {frequency_penalty} 超出范围，已自动调整为 {self.frequency_penalty}")
 
     def recognize_image(self, image_path: str, is_emoji: bool = False) -> str:
         """使用 Moonshot AI 识别图片内容并返回文本"""
@@ -55,7 +70,7 @@ class ImageRecognitionService:
 
             # 设置提示词
             text_prompt = "请描述这个图片" if not is_emoji else "这是一张微信聊天的图片截图，请描述这个聊天窗口左边的聊天用户用户发送的最后一张表情，不要去识别聊天用户的头像"
-            
+
             # 准备请求数据
             data = {
                 "model": self.model,
@@ -76,7 +91,9 @@ class ImageRecognitionService:
                         ]
                     }
                 ],
-                "temperature": self.temperature
+                "temperature": self.temperature,
+                "top_p": self.top_p,
+                "frequency_penalty": self.frequency_penalty
             }
 
             # 发送请求
@@ -87,18 +104,18 @@ class ImageRecognitionService:
                     json=data,
                     timeout=30  # 添加超时设置
                 )
-                
+
                 # 检查响应状态
                 if response.status_code != 200:
                     logger.error(f"API请求失败 - 状态码: {response.status_code}, 响应: {response.text}")
                     return "抱歉，图片识别服务暂时不可用"
-                    
+
                 # 处理响应
                 result = response.json()
                 if 'choices' not in result or not result['choices']:
                     logger.error(f"API响应格式异常: {result}")
                     return "抱歉，无法解析图片内容"
-                    
+
                 recognized_text = result['choices'][0]['message']['content']
 
                 # 处理表情包识别结果
@@ -141,10 +158,10 @@ class ImageRecognitionService:
                 json=data
             )
             response.raise_for_status()
-            
+
             result = response.json()
             return result['choices'][0]['message']['content']
 
         except Exception as e:
-            logger.error(f"Moonshot AI 聊天请求失败: {str(e)}")
-            return None 
+            logger.error(f"图像识别服务请求失败: {str(e)}")
+            return None

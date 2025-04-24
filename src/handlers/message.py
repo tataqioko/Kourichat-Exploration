@@ -17,8 +17,8 @@ from services.database import Session, ChatMessage
 import random
 import os
 from services.ai.llm_service import LLMService
-from modules.memory.memory_service import MemoryService
 from config import config
+from modules.memory.memory_service import MemoryService
 from modules.reminder.time_recognition import TimeRecognitionService
 from modules.reminder import ReminderService
 from .debug import DebugCommandHandler
@@ -27,7 +27,7 @@ from .debug import DebugCommandHandler
 logger = logging.getLogger('main')
 
 class MessageHandler:
-    def __init__(self, root_dir, api_key, base_url, model, max_token, temperature, 
+    def __init__(self, root_dir, api_key, base_url, model, max_token, temperature,
                  max_groups, robot_name, prompt_content, image_handler, emoji_handler, voice_handler, memory_service):
         self.root_dir = root_dir
         self.api_key = api_key
@@ -37,7 +37,7 @@ class MessageHandler:
         self.max_groups = max_groups
         self.robot_name = robot_name
         self.prompt_content = prompt_content
-        
+
         # 使用 DeepSeekAI 替换直接的 OpenAI 客户端
         self.deepseek = LLMService(
             api_key=api_key,
@@ -45,16 +45,18 @@ class MessageHandler:
             model=model,
             max_token=max_token,
             temperature=temperature,
-            max_groups=max_groups
+            max_groups=max_groups,
+            top_p=getattr(config.llm, 'top_p', 0.95),
+            frequency_penalty=getattr(config.llm, 'frequency_penalty', 0.2)
         )
-        
+
         # 消息队列相关
         self.message_queues = {}  # 存储每个用户的消息队列，格式：{queue_key: queue_data}
         self.queue_timers = {}    # 存储每个用户的定时器，格式：{queue_key: timer}
         self.QUEUE_TIMEOUT = config.behavior.message_queue.timeout  # 从配置中获取队列等待时间（秒）
         self.queue_lock = threading.Lock()
         self.chat_contexts = {}
-        
+
         # 微信实例
         self.wx = WeChat()
 
@@ -64,11 +66,11 @@ class MessageHandler:
         self.voice_handler = voice_handler
         # 使用新的记忆服务
         self.memory_service = memory_service
-        # 保存当前角色名 
+        # 保存当前角色名
         avatar_path = os.path.join(self.root_dir, config.behavior.context.avatar_dir)
         self.current_avatar = os.path.basename(avatar_path)
         logger.info(f"当前使用角色: {self.current_avatar}")
-        
+
         # 初始化调试命令处理器
         self.debug_handler = DebugCommandHandler(
             root_dir=root_dir,
@@ -76,7 +78,7 @@ class MessageHandler:
             llm_service=self.deepseek
         )
         logger.info("调试命令处理器已初始化")
-        
+
         # 初始化时间识别服务（使用已有的 deepseek 实例）
         self.time_recognition = TimeRecognitionService(self.deepseek)
         logger.info("时间识别服务已初始化")
@@ -97,7 +99,7 @@ class MessageHandler:
             clean_reply = reply
             if reply.startswith(f"@{sender_name} "):
                 clean_reply = reply[len(f"@{sender_name} "):]
-            
+
             # 保存到数据库
             session = Session()
             chat_message = ChatMessage(
@@ -109,13 +111,13 @@ class MessageHandler:
             session.add(chat_message)
             session.commit()
             session.close()
-            
-         
-          
+
+
+
             avatar_name = self.current_avatar
             # 添加到记忆，传递系统消息标志和用户ID
             self.memory_service.add_conversation(avatar_name, message, clean_reply, sender_id, is_system_message)
-            
+
         except Exception as e:
             logger.error(f"保存消息失败: {str(e)}")
 
@@ -125,7 +127,7 @@ class MessageHandler:
         prompt_path = os.path.join(avatar_dir, "avatar.md")
         # 使用类中已初始化的当前角色名
         avatar_name = self.current_avatar
-        
+
         try:
             #读取原始提示内容
             with open(prompt_path, "r", encoding="utf-8") as f:
@@ -136,7 +138,7 @@ class MessageHandler:
             core_memory = self.memory_service.get_core_memory(avatar_name, user_id=user_id)
             core_memory_prompt = f"# 核心记忆\n{core_memory}" if core_memory else ""
             logger.debug(f"核心记忆长度: {len(core_memory)}")
-            
+
             # 获取历史上下文（仅在程序重启时）
             # 检查是否已经为该用户加载过上下文
             recent_context = None
@@ -145,23 +147,23 @@ class MessageHandler:
                 if recent_context:
                     logger.info(f"程序启动：为用户 {user_id} 加载 {len(recent_context)} 条历史上下文消息")
                     logger.debug(f"用户 {user_id} 的历史上下文: {recent_context}")
-            
+
             # 如果是群聊场景，添加群聊环境提示
             if is_group:
-                
+
                 group_prompt_path = os.path.join(self.root_dir, "data", "base", "group.md")
                 with open(group_prompt_path, "r", encoding="utf-8") as f:
                     group_chat_prompt = f.read().strip()
-             
+
                 combined_system_prompt = f"{group_chat_prompt}\n\n{avatar_content}"
             else:
                 combined_system_prompt = avatar_content
-            
-           
+
+
             response = self.deepseek.get_response(
-                message=message, 
-                user_id=user_id, 
-                system_prompt=combined_system_prompt, 
+                message=message,
+                user_id=user_id,
+                system_prompt=combined_system_prompt,
                 previous_context=recent_context,
                 core_memory=core_memory_prompt
             )
@@ -172,13 +174,13 @@ class MessageHandler:
             # 降级处理：使用原始提示，不添加记忆
             return self.deepseek.get_response(message, user_id, self.prompt_content)
 
-    def handle_user_message(self, content: str, chat_id: str, sender_name: str, 
+    def handle_user_message(self, content: str, chat_id: str, sender_name: str,
                      username: str, is_group: bool = False, is_image_recognition: bool = False):
         """统一的消息处理入口"""
         try:
             logger.info(f"收到消息 - 来自: {sender_name}" + (" (群聊)" if is_group else ""))
             logger.debug(f"消息内容: {content}")
-            
+
             # 处理调试命令
             if self.debug_handler.is_debug_command(content):
                 logger.info(f"检测到调试命令: {content}")
@@ -187,31 +189,31 @@ class MessageHandler:
                     current_avatar=self.current_avatar,
                     user_id=chat_id
                 )
-                
+
                 if intercept:
                     # 发送调试命令的响应
                     if is_group:
                         response = f"@{sender_name} {response}"
                     self.wx.SendMsg(msg=response, who=chat_id)
-                    
+
                     # 不记录调试命令的对话
                     logger.info(f"已处理调试命令: {content}")
                     return None
-            
+
             # 将消息添加到队列，不直接处理
             self._add_to_message_queue(content, chat_id, sender_name, username, is_group, is_image_recognition)
-            
+
         except Exception as e:
             logger.error(f"处理消息失败: {str(e)}", exc_info=True)
             return None
 
-    def _add_to_message_queue(self, content: str, chat_id: str, sender_name: str, 
+    def _add_to_message_queue(self, content: str, chat_id: str, sender_name: str,
                             username: str, is_group: bool, is_image_recognition: bool):
         """添加消息到队列并设置定时器"""
         with self.queue_lock:
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             queue_key = self._get_queue_key(chat_id, sender_name, is_group)
-            
+
             # 初始化或更新队列
             if queue_key not in self.message_queues:
                 logger.info(f"[消息队列] 创建新队列 - 用户: {sender_name}" + (" (群聊)" if is_group else ""))
@@ -244,8 +246,8 @@ class MessageHandler:
 
             # 创建新的定时器
             timer = threading.Timer(
-                self.QUEUE_TIMEOUT, 
-                self._process_message_queue, 
+                self.QUEUE_TIMEOUT,
+                self._process_message_queue,
                 args=[queue_key]
             )
             timer.daemon = True
@@ -266,7 +268,7 @@ class MessageHandler:
                 queue_data = self.message_queues[queue_key]
                 last_update = queue_data['last_update']
                 sender_name = queue_data['sender_name']
-                
+
                 if current_time - last_update < self.QUEUE_TIMEOUT - 0.1:
                     logger.info(f"[消息队列] 等待更多消息 - 用户: {sender_name}, 剩余时间: {self.QUEUE_TIMEOUT - (current_time - last_update):.1f}秒")
                     return
@@ -275,7 +277,7 @@ class MessageHandler:
                 queue_data = self.message_queues.pop(queue_key)
                 if queue_key in self.queue_timers:
                     self.queue_timers.pop(queue_key)
-                
+
                 messages = queue_data['messages']
                 chat_id = queue_data['chat_id']  # 使用保存的原始chat_id
                 username = queue_data['username']
@@ -324,11 +326,11 @@ class MessageHandler:
             api_content = f"<用户 {sender_name}>\n{content}\n</用户>"
         else:
             api_content = content
-        
+
         reply = self.get_api_response(api_content, chat_id, is_group)
         if "</think>" in reply:
             reply = reply.split("</think>", 1)[1].strip()
-        
+
         voice_path = self.voice_handler.generate_voice(reply)
         if voice_path:
             try:
@@ -347,17 +349,17 @@ class MessageHandler:
             if is_group:
                 reply = f"@{sender_name} {reply}"
             self.wx.SendMsg(msg=reply, who=chat_id)
-        
+
         # 判断是否是系统消息
         is_system_message = sender_name == "System" or username == "System"
-        
+
         # 异步保存消息记录
         # 保存实际用户发送的内容，群聊中保留发送者信息
         save_content = api_content if is_group else content
-        threading.Thread(target=self.save_message, 
+        threading.Thread(target=self.save_message,
                        args=(chat_id, sender_name, save_content, reply, is_system_message)).start()
         return reply
-        
+
     def _handle_random_image_request(self, content, chat_id, sender_name, username, is_group):
         """处理随机图片请求"""
         logger.info("处理随机图片请求")
@@ -366,7 +368,7 @@ class MessageHandler:
             api_content = f"<用户 {sender_name}>\n{content}\n</用户>"
         else:
             api_content = content
-        
+
         image_path = self.image_handler.get_random_image()
         if image_path:
             try:
@@ -381,22 +383,22 @@ class MessageHandler:
                         os.remove(image_path)
                 except Exception as e:
                     logger.error(f"删除临时图片失败: {str(e)}")
-            
+
             if is_group:
                 reply = f"@{sender_name} {reply}"
             self.wx.SendMsg(msg=reply, who=chat_id)
-            
+
             # 判断是否是系统消息
             is_system_message = sender_name == "System" or username == "System"
-            
+
             # 异步保存消息记录
             # 保存实际用户发送的内容，群聊中保留发送者信息
             save_content = api_content if is_group else content
-            threading.Thread(target=self.save_message, 
+            threading.Thread(target=self.save_message,
                            args=(chat_id, sender_name, save_content, reply, is_system_message)).start()
             return reply
         return None
-        
+
     def _handle_image_generation_request(self, content, chat_id, sender_name, username, is_group):
         """处理图像生成请求"""
         logger.info("处理画图请求")
@@ -405,7 +407,7 @@ class MessageHandler:
             api_content = f"<用户 {sender_name}>\n{content}\n</用户>"
         else:
             api_content = content
-        
+
         image_path = self.image_handler.generate_image(content)
         if image_path:
             try:
@@ -420,18 +422,18 @@ class MessageHandler:
                         os.remove(image_path)
                 except Exception as e:
                     logger.error(f"删除临时图片失败: {str(e)}")
-            
+
             if is_group:
                 reply = f"@{sender_name} {reply}"
             self.wx.SendMsg(msg=reply, who=chat_id)
-            
+
             # 判断是否是系统消息
             is_system_message = sender_name == "System" or username == "System"
-            
+
             # 异步保存消息记录
             # 保存实际用户发送的内容，群聊中保留发送者信息
             save_content = api_content if is_group else content
-            threading.Thread(target=self.save_message, 
+            threading.Thread(target=self.save_message,
                            args=(chat_id, sender_name, save_content, reply, is_system_message)).start()
             return reply
         return None
@@ -443,7 +445,7 @@ class MessageHandler:
             api_content = f"<用户 {sender_name}>\n{content}\n</用户>"
         else:
             api_content = content
-        
+
         reply = self.get_api_response(api_content, chat_id, is_group)
         logger.info(f"AI回复: {reply}")
 
@@ -451,7 +453,7 @@ class MessageHandler:
         if "</think>" in reply:
             think_content, reply = reply.split("</think>", 1)
             logger.debug(f"思考过程: {think_content.strip()}")
-        
+
         # 处理群聊中的回复
         if is_group:
             reply = f"@{sender_name} {reply}"
@@ -468,16 +470,16 @@ class MessageHandler:
                 emotion_tags = self.emoji_handler.extract_emotion_tags(part)
                 if emotion_tags:
                     logger.debug(f"消息片段包含表情: {emotion_tags}")
-                
+
                 # 清理表情标签并发送文本
                 clean_part = part
                 for tag in emotion_tags:
                     clean_part = clean_part.replace(f'[{tag}]', '')
-                
+
                 if clean_part.strip():
                     self.wx.SendMsg(msg=clean_part.strip(), who=chat_id)
                     logger.debug(f"发送消息: {clean_part[:20]}...")
-                
+
                 # 发送该部分包含的表情
                 for emotion_type in emotion_tags:
                     try:
@@ -488,22 +490,22 @@ class MessageHandler:
                             time.sleep(1)
                     except Exception as e:
                         logger.error(f"发送表情失败 - {emotion_type}: {str(e)}")
-                
+
                 time.sleep(random.randint(2, 4))
         else:
             # 处理不包含分隔符的消息
             emotion_tags = self.emoji_handler.extract_emotion_tags(reply)
             if emotion_tags:
                 logger.debug(f"消息包含表情: {emotion_tags}")
-            
+
             clean_reply = reply
             for tag in emotion_tags:
                 clean_reply = clean_reply.replace(f'[{tag}]', '')
-            
+
             if clean_reply.strip():
                 self.wx.SendMsg(msg=clean_reply.strip(), who=chat_id)
                 logger.debug(f"发送消息: {clean_reply[:20]}...")
-            
+
             # 发送表情
             for emotion_type in emotion_tags:
                 try:
@@ -529,7 +531,7 @@ class MessageHandler:
         if sender_name == "System" or sender_name.lower() == "system" :
             logger.debug(f"跳过时间提醒识别：{sender_name}发送的消息不处理")
             return
-            
+
         try:
             # 使用 time_recognition 服务识别时间
             time_infos = self.time_recognition.recognize_time(content)
@@ -537,7 +539,7 @@ class MessageHandler:
                 for target_time, reminder_content in time_infos:
                     logger.info(f"检测到提醒请求 - 用户: {sender_name}")
                     logger.info(f"提醒时间: {target_time}, 内容: {reminder_content}")
-                    
+
                     # 使用 reminder_service 创建提醒
                     success = self.reminder_service.add_reminder(
                         chat_id=chat_id,
@@ -546,12 +548,12 @@ class MessageHandler:
                         sender_name=sender_name,
                         silent=True
                     )
-                    
+
                     if success:
                         logger.info("提醒任务创建成功")
                     else:
                         logger.error("提醒任务创建失败")
-                    
+
         except Exception as e:
             logger.error(f"处理时间提醒失败: {str(e)}")
 
@@ -559,9 +561,9 @@ class MessageHandler:
                     username: str, is_group: bool = False):
         """添加消息到队列（兼容旧接口）"""
         return self._add_to_message_queue(content, chat_id, sender_name, username, is_group, False)
-        
+
     def process_messages(self, chat_id: str):
         """处理消息队列中的消息（已废弃，保留兼容）"""
         # 该方法不再使用，保留以兼容旧代码
         logger.warning("process_messages方法已废弃，使用handle_message代替")
-        pass 
+        pass

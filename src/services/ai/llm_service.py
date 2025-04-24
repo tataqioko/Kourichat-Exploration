@@ -17,6 +17,7 @@ import pathlib
 import requests
 from typing import Dict, List, Optional, Tuple, Union
 from openai import OpenAI
+from src.autoupdate.updater import Updater
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -29,7 +30,8 @@ logger = logging.getLogger('main')
 
 class LLMService:
     def __init__(self, api_key: str, base_url: str, model: str,
-                 max_token: int, temperature: float, max_groups: int):
+                 max_token: int, temperature: float, max_groups: int,
+                 top_p: float = 0.95, frequency_penalty: float = 0.2):
         """
         强化版AI服务初始化
 
@@ -39,14 +41,22 @@ class LLMService:
         :param max_token: 最大token限制
         :param temperature: 创造性参数(0~2)
         :param max_groups: 最大对话轮次记忆
+        :param top_p: Top-p采样参数(0~1)
+        :param frequency_penalty: 频率惩罚参数(0~2)
         :param system_prompt: 系统级提示词
         """
+        # 创建 Updater 实例获取版本信息
+        updater = Updater()
+        version = updater.get_current_version()
+        version_identifier = updater.get_version_identifier()
+
         self.client = OpenAI(
             api_key=api_key,
             base_url=base_url,
             default_headers={
                 "Content-Type": "application/json",
-                "User-Agent": "MyDreamBot/1.0"
+                "User-Agent": version_identifier,
+                "X-KouriChat-Version": version
             }
         )
         self.config = {
@@ -54,6 +64,8 @@ class LLMService:
             "max_token": max_token,
             "temperature": temperature,
             "max_groups": max_groups,
+            "top_p": top_p,
+            "frequency_penalty": frequency_penalty
         }
         self.chat_contexts: Dict[str, List[Dict]] = {}
 
@@ -113,14 +125,14 @@ class LLMService:
                 filtered_content = parts[-1].strip()
             else:
                 filtered_content = content
-            
+
             # 过滤 R1 格式 (思考过程...\n\n\n最终回复)
             # 查找三个连续换行符
             triple_newline_match = re.search(r'\n\n\n', filtered_content)
             if triple_newline_match:
                 # 只保留三个连续换行符后面的内容（最终回复）
                 filtered_content = filtered_content[triple_newline_match.end():]
-            
+
             return filtered_content.strip()
         except Exception as e:
             logger.error(f"过滤思考内容失败: {str(e)}")
@@ -145,12 +157,12 @@ class LLMService:
                             content = first_choice["message"].get("content")
                             if content and isinstance(content, str):
                                 return True
-                        
+
                         # 格式2: choices[0].content
                         content = first_choice.get("content")
                         if content and isinstance(content, str):
                             return True
-                        
+
                         # 格式3: choices[0].text
                         text = first_choice.get("text")
                         if text and isinstance(text, str):
@@ -158,7 +170,7 @@ class LLMService:
 
             logger.warning("无法从响应中获取有效内容")
             return False
-            
+
         except Exception as e:
             logger.error(f"验证响应时发生错误: {str(e)}")
             return False
@@ -184,7 +196,7 @@ class LLMService:
                 logger.info(f"程序启动初始化：为用户 {user_id} 加载历史上下文，共 {len(previous_context)} 条消息")
                 # 确保上下文只包含当前用户的历史信息
                 self.chat_contexts[user_id] = previous_context.copy()
-            
+
             # 添加当前消息到上下文
             self._manage_context(user_id, message)
 
@@ -195,13 +207,13 @@ class LLMService:
                 current_dir = os.path.dirname(os.path.abspath(__file__))  # src/services/ai
                 project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))  # 项目根目录
                 base_prompt_path = os.path.join(project_root, "data", "base", "base.md")
-                
+
                 with open(base_prompt_path, "r", encoding="utf-8") as f:
                     base_content = f.read()
             except Exception as e:
                 logger.error(f"基础Prompt文件读取失败: {str(e)}")
                 base_content = ""
-            
+
             # 构建完整提示词: base + 核心记忆 + 人设
             if core_memory:
                 final_prompt = f"{base_content}\n\n{core_memory}\n\n{system_prompt}"
@@ -209,7 +221,7 @@ class LLMService:
             else:
                 final_prompt = f"{base_content}\n\n{system_prompt}"
                 logger.debug("提示词顺序：base.md + 人设")
-            
+
             # 构建消息列表
             messages = [
                 {"role": "system", "content": final_prompt},
@@ -219,7 +231,7 @@ class LLMService:
             # 为 Ollama 构建消息内容
             chat_history = self.chat_contexts.get(user_id, [])[-self.config["max_groups"] * 2:]
             history_text = "\n".join([
-                f"{msg['role']}: {msg['content']}" 
+                f"{msg['role']}: {msg['content']}"
                 for msg in chat_history
             ])
             ollama_message = {
@@ -244,34 +256,43 @@ class LLMService:
 
                 # 使用 requests 库向 Ollama API 发送 POST 请求
                 try:
+                    # 创建 Updater 实例获取版本信息
+                    updater = Updater()
+                    version = updater.get_current_version()
+                    version_identifier = updater.get_version_identifier()
+
                     response = requests.post(
                         f"{str(self.client.base_url)}",
                         json=request_config,
-                        headers={"Content-Type": "application/json"}
+                        headers={
+                            "Content-Type": "application/json",
+                            "User-Agent": version_identifier,
+                            "X-KouriChat-Version": version
+                        }
                     )
                     response.raise_for_status()
                     response_data = response.json()
-                    
+
                     # 检查响应中是否包含 message 字段
                     if response_data and "message" in response_data:
                         raw_content = response_data["message"]["content"]
-                        
+
                         # 处理 R1 特殊格式，可能包含 reasoning_content 字段
                         if isinstance(response_data["message"], dict) and "reasoning_content" in response_data["message"]:
                             logger.debug("检测到 R1 格式响应，将分离思考内容")
                             # 只使用 content 字段内容，忽略 reasoning_content
                             raw_content = response_data["message"]["content"]
-                            
+
                         logger.debug("Ollama API响应内容: %s", raw_content)
                     else:
                         raise ValueError("错误的API响应结构")
-                        
+
                     clean_content = self._sanitize_response(raw_content)
                     # 过滤思考内容
                     filtered_content = self._filter_thinking_content(clean_content)
                     self._manage_context(user_id, filtered_content, "assistant")
                     return filtered_content
-                    
+
                 except Exception as e:
                     logger.error(f"Ollama API请求失败: {str(e)}")
                     raise
@@ -284,8 +305,8 @@ class LLMService:
                     "messages": messages,  # 消息列表
                     "temperature": self.config["temperature"],  # 温度参数
                     "max_tokens": self.config["max_token"],  # 最大 token 数
-                    "top_p": 0.95,  # top_p 参数
-                    "frequency_penalty": 0.2  # 频率惩罚参数
+                    "top_p": self.config["top_p"],  # top_p 参数
+                    "frequency_penalty": self.config["frequency_penalty"]  # 频率惩罚参数
                 }
 
                 # 使用 OpenAI 客户端发送请求
@@ -339,7 +360,7 @@ class LLMService:
         Args:
             messages: 消息列表，每个消息是包含 role 和 content 的字典
             **kwargs: 额外的参数配置
-            
+
         Returns:
             str: AI的回复内容
         """
@@ -348,22 +369,26 @@ class LLMService:
                 model=self.config["model"],
                 messages=messages,
                 temperature=kwargs.get('temperature', self.config["temperature"]),
-                max_tokens=self.config["max_token"]
+                max_tokens=self.config["max_token"],
+                top_p=kwargs.get('top_p', self.config["top_p"]),
+                frequency_penalty=kwargs.get('frequency_penalty', self.config["frequency_penalty"])
             )
-            
+
             if not self._validate_response(response.model_dump()):
                 raise ValueError("Invalid API response structure")
-            
-            raw_content = response.choices[0].message.content    
+
+            raw_content = response.choices[0].message.content
             # 清理和过滤响应内容
             clean_content = self._sanitize_response(raw_content)
             filtered_content = self._filter_thinking_content(clean_content)
-                
+
             return filtered_content or ""
-            
+
         except Exception as e:
             logger.error(f"Chat completion failed: {str(e)}")
             return ""
+
+
 
     def get_ollama_models(self) -> List[Dict]:
         """获取本地 Ollama 可用的模型列表"""
