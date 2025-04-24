@@ -23,10 +23,10 @@ logger = logging.getLogger(__name__)
 
 class Updater:
 
-    # 云端公告、版本信息、模型列表和更新包 URL
-    CLOUD_ANNOUNCEMENT_URL = "https://static.kourichat.com/kourichat/announcement.json"
-    CLOUD_VERSION_URL = "https://static.kourichat.com/kourichat/version.json"
-    CLOUD_MODELS_URL = "https://static.kourichat.com/kourichat/models.json"
+    # 云端公告、版本信息、模型列表和更新包 URLs
+    CLOUD_ANNOUNCEMENT_URL = "https://static.kourichat.com/kourichat/cloud/announcement.json"
+    CLOUD_VERSION_URL = "https://static.kourichat.com/kourichat/cloud/version.json"
+    CLOUD_MODELS_URL = "https://static.kourichat.com/kourichat/cloud/models.json"
     CLOUD_RELEASE_URL = "https://static.kourichat.com/kourichat/releases/releases.zip"
 
     # 默认需要跳过的文件和文件夹（不会被更新）
